@@ -1,0 +1,4 @@
+venv/
+staticdata/
+.idea/
+echoes.db
