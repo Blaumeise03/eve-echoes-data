@@ -1,10 +1,12 @@
 import json
 import logging
+import os
+import re
 import sqlite3
 from sqlite3 import Error, Connection
-from typing import Dict, Any, Tuple, Type, Optional
+from typing import Dict, Any, Tuple, Type, Optional, List
 
-logger = logging.getLogger("eed.db")
+logger = logging.getLogger("ee.db")
 
 
 def decapitalize(s, upper_rest=False):
@@ -25,6 +27,8 @@ def to_type(string: str) -> Type:
             return bool
         case "float":
             return float
+        case "list":
+            return str
 
 
 def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str, Type]]:
@@ -58,14 +62,14 @@ class EchoesDB:
         sql = "REPLACE INTO %s ( %s ) VALUES ( %s )" % (table, columns, placeholders)
         self.conn.execute(sql, list(data.values()))
 
-    def load_data(self,
-                  file: str,
-                  table: str,
-                  auto_schema=True,
-                  schema: Optional[Dict[str, Tuple[str, Type]]] = None,
-                  fields: Optional[str] = None):
+    def load_dict_data(self,
+                       file: str,
+                       table: str,
+                       auto_schema=True,
+                       schema: Optional[Dict[str, Tuple[str, Type]]] = None,
+                       fields: Optional[str] = None):
         logger.info("Loading data from file %s into %s", file, table)
-        with open(file, "r") as f:
+        with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
         if auto_schema:
             schema = load_schema(file.replace(".json", ".schema.json"), schema)
@@ -85,6 +89,45 @@ class EchoesDB:
             loaded += 1
         self.conn.commit()
         logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
+
+    def _insert_batch_data(self, table: str, key_field: str, value_field: str, batch: List[Tuple[Any, Any, Any]]):
+        sql = "INSERT INTO %s ( %s, %s ) VALUES ( ?, ? ) ON CONFLICT( %s ) DO UPDATE SET %s=?" % (table, key_field, value_field, key_field, value_field)
+        self.conn.executemany(sql, batch)
+
+    def load_simple_data(self,
+                         file: str,
+                         table: str,
+                         key_field: str,
+                         value_field: str,
+                         key_type: Type = int,
+                         value_type: Type = str,
+                         second_value_field: Optional[str] = None):
+        batch = []
+        with open(file, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        for key, value in raw.items():
+            batch.append((key_type(key), value_type(value), value_type(value)))
+        self._insert_batch_data(table, key_field, value_field, batch)
+        if second_value_field:
+            self._insert_batch_data(table, key_field, second_value_field, batch)
+        self.conn.commit()
+
+    def load_language(self, base_path: str, lang: str, copy_to: Optional[str] = None):
+        directory = os.fsencode(f"{base_path}/{lang}")
+        logger.info("Loading language %s into the database: %s", lang, f"{base_path}/{lang}")
+        count = 0
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if not re.match(r"\d+\.json", filename):
+                continue
+            self.load_simple_data(
+                file=f"{base_path}/{lang}/{filename}",
+                table="localised_strings",
+                key_field="id", value_field=lang,
+                key_type=int, value_type=str, second_value_field=copy_to
+            )
+            count += 1
+        logger.info("Loaded %s language files for language %s", count, lang)
 
     def setup_tables(self):
         self.conn.execute("create table if not exists attributes("
@@ -106,6 +149,49 @@ class EchoesDB:
                           "    attributeSourceName  TEXT    default '',"
                           "    nameLocalisationKey  INTEGER default 0,"
                           "    tipLocalisationKey   INTEGER default 0,"
-                          "    attributeFormula     TEXT    default 'A' not null"
-                          ");"
-                          )
+                          "    attributeFormula     TEXT    default 'A' not null);")
+        self.conn.execute("create table if not exists effects("
+                          "    id                            INTEGER           not null primary key,"
+                          "    disallowAutoRepeat            INTEGER default 0 not null,"
+                          "    dischargeAttributeId          INTEGER default 0 not null,"
+                          "    durationAttributeId           INTEGER default 0 not null,"
+                          "    effectCategory                INTEGER default 0 not null,"
+                          "    effectName                    TEXT              not null,"
+                          "    electronicChance              INTEGER default 0 not null,"
+                          "    falloffAttributeId            INTEGER default 0 not null,"
+                          "    fittingUsageChanceAttributeId INTEGER default 0 not null,"
+                          "    guid                          TEXT              not null,"
+                          "    isAssistance                  INTEGER default 0 not null,"
+                          "    isOffensive                   INTEGER default 0 not null,"
+                          "    isWarpSafe                    INTEGER default 0 not null,"
+                          "    rangeAttributeId              INTEGER default 0 not null,"
+                          "    rangeChance                   INTEGER default 0 not null,"
+                          "    trackingSpeedAttributeId      INTEGER default 0 not null);")
+        self.conn.execute("create table if not exists unit("
+                          "    id          INTEGER primary key,"
+                          "    description TEXT,"
+                          "    displayName TEXT,"
+                          "    unitName    TEXT );")
+        self.conn.execute("create table if not exists localised_strings("
+                          "    id     INTEGER primary key,"
+                          "    source TEXT,"
+                          "    en     TEXT,"
+                          "    de     TEXT,"
+                          "    fr     TEXT,"
+                          "    ja     TEXT,"
+                          "    kr     TEXT,"
+                          "    por    TEXT,"
+                          "    ru     TEXT,"
+                          "    spa    TEXT,"
+                          "    zh     TEXT,"
+                          "    zhcn   TEXT);")
+        # self.conn.execute("create table groups("
+        #                   "    id                   INTEGER primary key,"
+        #                   "    anchorable           INTEGER not null,"
+        #                   "    anchored             INTEGER not null,"
+        #                   "    fittableNonSingleton INTEGER not null,"
+        #                   "    iconPath             TEXT,"
+        #                   "    useBasePrice         INTEGER not null,"
+        #                   "    localisedNameIndex   INTEGER not null,"
+        #                   "    sourceName           TEXT,"
+        #                   "    itemIds              TEXT );")
