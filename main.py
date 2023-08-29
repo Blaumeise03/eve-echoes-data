@@ -39,9 +39,10 @@ if __name__ == '__main__':
         file="staticdata/staticdata/dogma/units.json", table="unit",
         fields="id,description,displayName,unitName"
     )
-    for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
-        db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
+    #for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
+    #    db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
     db.load_language(base_path="staticdata/staticdata/gettext", lang="zh", copy_to="source")
+    db.load_localized_cache()
     db.load_dict_data(
         file="staticdata/staticdata/items/group.json", table="groups",
         schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},

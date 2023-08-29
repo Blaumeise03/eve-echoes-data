@@ -7,6 +7,8 @@ from sqlite3 import Error, Connection
 from typing import Dict, Any, Tuple, Type, Optional, List
 
 logger = logging.getLogger("ee.db")
+name_regexp = re.compile(r"(\{([a-zA-Z_-]+:)[^{}]+})")
+name_corrected_regexp = re.compile(r"(\{[^{}]+})")
 
 
 def decapitalize(s, upper_rest=False):
@@ -15,6 +17,13 @@ def decapitalize(s, upper_rest=False):
 
 def snake_to_camel(value: str) -> str:
     return decapitalize("".join(x.capitalize() for x in value.lower().split("_")))
+
+
+def correct_string(string: str):
+    matches = re.finditer(name_regexp, string)
+    for m in matches:
+        string = string.replace(m.group(2), "")
+    return string
 
 
 def to_type(string: str) -> Type:
@@ -48,6 +57,8 @@ def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str
 class EchoesDB:
     def __init__(self) -> None:
         self.conn = None  # type: Connection | None
+        self.strings = {}  # type: Dict[str, int]
+        self.new_loc_cache = {}
 
     def create_connection(self, db_file: str):
         """ create a database connection to a SQLite database """
@@ -98,9 +109,20 @@ class EchoesDB:
             if localized:
                 for field, k in localized.items():
                     if k in data:
-                        data[field] = self.get_localized_id(data[k], save_new=True)
+                        string = data[k]
                     else:
-                        data[field] = self.get_localized_id(item[k], save_new=True)
+                        string = item[k]
+                    string_c = correct_string(string)
+                    if string == string_c:
+                        data[field] = self.get_localized_id(string, save_new=True, only_cache=True)
+                    else:
+                        # Handle strings like "{module_affix:联邦海军} {module:大型装甲连接模块}"
+                        # The placeholder will get replaced with the ids,
+                        # e.g. "{43690} {3507}"
+                        data[field] = -2
+                        if k in data:
+                            data[k] = self.correct_localized_string(string)
+
             # Load extra data from additional file
             if raw_extra and key in raw_extra:
                 for k, v in raw_extra[key].items():
@@ -116,6 +138,7 @@ class EchoesDB:
             loaded += 1
         self.conn.commit()
         logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
+        self.save_localized_cache()
 
     def load_all_dict_data(self,
                            root_path: str,
@@ -154,12 +177,15 @@ class EchoesDB:
                          value_field: str,
                          key_type: Type = int,
                          value_type: Type = str,
-                         second_value_field: Optional[str] = None):
+                         second_value_field: Optional[str] = None,
+                         save_lang=False):
         batch = []
         with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
         for key, value in raw.items():
             batch.append((key_type(key), value_type(value), value_type(value)))
+            if save_lang:
+                self.strings[value_type(value)] = key_type(key)
         self._insert_batch_data(table, key_field, value_field, batch)
         if second_value_field:
             self._insert_batch_data(table, key_field, second_value_field, batch)
@@ -177,7 +203,8 @@ class EchoesDB:
                 file=f"{base_path}/{lang}/{filename}",
                 table="localised_strings",
                 key_field="id", value_field=lang,
-                key_type=int, value_type=str, second_value_field=copy_to
+                key_type=int, value_type=str, second_value_field=copy_to,
+                save_lang=(lang == "zh")
             )
             count += 1
         logger.info("Loaded %s language files for language %s", count, lang)
@@ -191,20 +218,52 @@ class EchoesDB:
             start = res[0] + 1
         return start
 
-    def get_localized_id(self, zh_name: str, save_new=False) -> int:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT id FROM localised_strings WHERE source=?;", (zh_name,))
-        res = cursor.fetchone()
+    def get_localized_id(self, zh_name: str, save_new=False, only_cache=True) -> int:
+        if zh_name in self.strings:
+            return self.strings[zh_name]
+        res = None
+        cursor = None
+        if not only_cache:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT id FROM localised_strings WHERE source=?;", (zh_name,))
+            res = cursor.fetchone()
         if res is None:
             if save_new:
                 next_id = self.get_next_loc_id()
-                cursor.execute("INSERT INTO localised_strings ( id, source ) VALUES ( ?, ? )", (next_id, zh_name))
-                logger.info("Localized string for '%s' not found, saved as id %s", zh_name, next_id)
+                if not only_cache:
+                    cursor.execute("INSERT INTO localised_strings ( id, source ) VALUES ( ?, ? )", (next_id, zh_name))
+                    logger.info("Localized string for '%s' not found, saved as id %s", zh_name, next_id)
+                self.strings[zh_name] = next_id
+                if only_cache:
+                    self.new_loc_cache[zh_name] = next_id
                 return next_id
             else:
                 logger.warning("Localized string for '%s' not found", zh_name)
                 return -1
+        self.strings[zh_name] = res[0]
         return res[0]
+
+    def load_localized_cache(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id, source FROM localised_strings")
+        res = cursor.fetchall()
+        for s_id, source in res:
+            self.strings[source] = s_id
+        logger.info("Loaded %s localized strings into the database", len(res))
+
+    def save_localized_cache(self):
+        if len(self.new_loc_cache) == 0:
+            return
+        batch = [(v, k, k) for k, v in self.new_loc_cache.items()]
+        self._insert_batch_data(table="localised_strings", key_field="id", value_field="source", batch=batch)
+        self.new_loc_cache.clear()
+        logger.info("Saved %s new localised strings from cache into the database", len(batch))
+
+    def correct_localized_string(self, string: str):
+        matches = re.finditer(name_corrected_regexp, string)
+        for m in matches:
+            string = string.replace(m.group(2), str(self.get_localized_id(m.group(2), save_new=True, only_cache=True)))
+        return string
 
     def setup_tables(self):
         self.conn.execute("create table if not exists attributes("
