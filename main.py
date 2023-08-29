@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import sqlite3
 import sys
 from collections import defaultdict
 
@@ -41,4 +42,45 @@ if __name__ == '__main__':
     for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
         db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
     db.load_language(base_path="staticdata/staticdata/gettext", lang="zh", copy_to="source")
+    db.load_dict_data(
+        file="staticdata/staticdata/items/group.json", table="groups",
+        schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
+        default_values={"itemIds": "[]"},
+        fields="id,itemIds,anchorable,anchored,fittableNonSingleton,iconPath,useBasePrice,localisedNameIndex,sourceName"
+    )
+    db.load_dict_data(
+        file="staticdata/staticdata/items/category.json", table="categories",
+        schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
+        default_values={"groupIds": "[]"},
+        fields="id,groupIds,localisedNameIndex,sourceName"
+    )
+    db.load_all_dict_data(
+        root_path="staticdata/staticdata/items", table="items",
+        merge_with_file_path="staticdata/staticdata/items/item_dogma",
+        schema={
+            "zh_desc": ("sourceDesc", str),
+            "zh_name": ("sourceName", str),
+            "mining_exp_gain": ("exp", int)
+        },
+        localized={
+            "nameKey": "zh_name",
+            "descKey": "zh_desc",
+        },
+        default_values={
+            "npcCalCodes": "[]",
+            "normalDebris": "[]",
+            "corpCamera": "[]",
+            "abilityList": "[]",
+            "shipBonusCodeList": "[]",
+            "shipBonusSkillList": "[]",
+            "descSpecial": "[]",
+            "canBeJettisoned": False
+        },
+        fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
+    )
+    # ToDo: find preSkill, maybe exp? not sure about this one
+
+    #conn = sqlite3.connect("echoes.db")
+    #db.conn.backup(target=conn)
+    #conn.close()
     db.conn.close()

@@ -65,33 +65,86 @@ class EchoesDB:
     def load_dict_data(self,
                        file: str,
                        table: str,
+                       merge_with_file: Optional[str] = None,
                        auto_schema=True,
                        schema: Optional[Dict[str, Tuple[str, Type]]] = None,
-                       fields: Optional[str] = None):
+                       fields: Optional[str] = None,
+                       default_values: Optional[Dict[str, Any]] = None,
+                       localized: Optional[Dict[str, str]] = None):
         logger.info("Loading data from file %s into %s", file, table)
         with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
+        raw_extra = None
+        if merge_with_file:
+            with open(merge_with_file, "r", encoding="utf-8") as f:
+                raw_extra = json.load(f)
         if auto_schema:
-            schema = load_schema(file.replace(".json", ".schema.json"), schema)
+            schema = load_schema(file=file.replace(".json", ".schema.json"),
+                                 schema=schema)
+            if merge_with_file:
+                load_schema(file=merge_with_file.replace(".json", ".schema.json") if merge_with_file else None,
+                            schema=schema)
 
         if type(fields) == str:
             fields = fields.split(",")
         loaded = 0
-        for key, value in raw.items():
+        for key, item in raw.items():
             data = {schema["key"][0]: int(key)}
-            for k, v in value.items():
+            for k, v in item.items():
                 if schema[k][1] is None:
                     continue
                 if fields is not None and schema[k][0] in fields:
-                    conv = (schema[k][1])(v)
-                    data[schema[k][0]] = conv
+                    data[schema[k][0]] = (schema[k][1])(v)
+            if localized:
+                for field, k in localized.items():
+                    if k in data:
+                        data[field] = self.get_localized_id(data[k], save_new=True)
+                    else:
+                        data[field] = self.get_localized_id(item[k], save_new=True)
+            # Load extra data from additional file
+            if raw_extra and key in raw_extra:
+                for k, v in raw_extra[key].items():
+                    if schema[k][1] is None:
+                        continue
+                    if fields is not None and schema[k][0] in fields:
+                        data[schema[k][0]] = (schema[k][1])(v)
+            if default_values:
+                for field, v in default_values.items():
+                    if field not in data:
+                        data[field] = v
             self._insert_data(table, data)
             loaded += 1
         self.conn.commit()
         logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
 
+    def load_all_dict_data(self,
+                           root_path: str,
+                           table: str,
+                           merge_with_file_path: Optional[str] = None,
+                           auto_schema=True,
+                           schema: Optional[Dict[str, Tuple[str, Type]]] = None,
+                           fields: Optional[str] = None,
+                           default_values: Optional[Dict[str, Any]] = None,
+                           localized: Optional[Dict[str, str]] = None):
+        directory = os.fsencode(root_path)
+        logger.info("Loading data from dir %s into %s", root_path, table)
+        count = 0
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if not re.match(r"\d+\.json", filename):
+                continue
+            file_2 = None
+            if merge_with_file_path and os.path.exists(f"{merge_with_file_path}/{filename}"):
+                file_2 = f"{merge_with_file_path}/{filename}"
+            self.load_dict_data(
+                file=f"{root_path}/{filename}", table=table, merge_with_file=file_2, auto_schema=auto_schema,
+                schema=schema, fields=fields, default_values=default_values, localized=localized
+            )
+        logger.info("Loaded %s files into %s from %s", count, table, root_path)
+
     def _insert_batch_data(self, table: str, key_field: str, value_field: str, batch: List[Tuple[Any, Any, Any]]):
-        sql = "INSERT INTO %s ( %s, %s ) VALUES ( ?, ? ) ON CONFLICT( %s ) DO UPDATE SET %s=?" % (table, key_field, value_field, key_field, value_field)
+        sql = "INSERT INTO %s ( %s, %s ) VALUES ( ?, ? ) ON CONFLICT( %s ) DO UPDATE SET %s=?" % (
+            table, key_field, value_field, key_field, value_field)
         self.conn.executemany(sql, batch)
 
     def load_simple_data(self,
@@ -128,6 +181,30 @@ class EchoesDB:
             )
             count += 1
         logger.info("Loaded %s language files for language %s", count, lang)
+
+    def get_next_loc_id(self):
+        start = 5000000000
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM localised_strings WHERE id>=? ORDER BY ID DESC LIMIT 1;", (start,))
+        res = cursor.fetchone()
+        if res is not None:
+            start = res[0] + 1
+        return start
+
+    def get_localized_id(self, zh_name: str, save_new=False) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM localised_strings WHERE source=?;", (zh_name,))
+        res = cursor.fetchone()
+        if res is None:
+            if save_new:
+                next_id = self.get_next_loc_id()
+                cursor.execute("INSERT INTO localised_strings ( id, source ) VALUES ( ?, ? )", (next_id, zh_name))
+                logger.info("Localized string for '%s' not found, saved as id %s", zh_name, next_id)
+                return next_id
+            else:
+                logger.warning("Localized string for '%s' not found", zh_name)
+                return -1
+        return res[0]
 
     def setup_tables(self):
         self.conn.execute("create table if not exists attributes("
@@ -185,13 +262,43 @@ class EchoesDB:
                           "    spa    TEXT,"
                           "    zh     TEXT,"
                           "    zhcn   TEXT);")
-        # self.conn.execute("create table groups("
-        #                   "    id                   INTEGER primary key,"
-        #                   "    anchorable           INTEGER not null,"
-        #                   "    anchored             INTEGER not null,"
-        #                   "    fittableNonSingleton INTEGER not null,"
-        #                   "    iconPath             TEXT,"
-        #                   "    useBasePrice         INTEGER not null,"
-        #                   "    localisedNameIndex   INTEGER not null,"
-        #                   "    sourceName           TEXT,"
-        #                   "    itemIds              TEXT );")
+        self.conn.execute("create table if not exists groups("
+                          "    id                   INTEGER primary key,"
+                          "    anchorable           INTEGER not null,"
+                          "    anchored             INTEGER not null,"
+                          "    fittableNonSingleton INTEGER not null,"
+                          "    iconPath             TEXT,"
+                          "    useBasePrice         INTEGER not null,"
+                          "    localisedNameIndex   INTEGER not null,"
+                          "    sourceName           TEXT,"
+                          "    itemIds              TEXT );")
+        self.conn.execute("create table if not exists categories("
+                          "    id                 INTEGER primary key,"
+                          "    groupIds           TEXT,"
+                          "    localisedNameIndex INTEGER default 0 not null,"
+                          "    sourceName         TEXT"
+                          ");")
+        self.conn.execute("create table if not exists items("
+                          "    id                 INTEGER primary key,"
+                          "    canBeJettisoned    INTEGER            not null,"
+                          "    descSpecial        TEXT               not null,"
+                          "    mainCalCode        TEXT    default '' not null,"
+                          "    onlineCalCode      TEXT    default '',"
+                          "    activeCalCode      TEXT    default '',"
+                          "    sourceDesc         TEXT               not null,"
+                          "    sourceName         TEXT               not null,"
+                          "    nameKey            INTEGER            not null,"
+                          "    descKey            INTEGER            not null,"
+                          "    marketGroupId      INTEGER,"
+                          "    lockSkin           TEXT,"
+                          "    npcCalCodes        TEXT,"
+                          "    product            INTEGER,"
+                          "    exp                REAL    default 0  not null,"
+                          "    published          INTEGER default 0  not null,"
+                          "    preSkill           TEXT,"
+                          "    corpCamera         TEXT               not null,"
+                          "    abilityList        TEXT               not null,"
+                          "    normalDebris       TEXT               not null,"
+                          "    shipBonusCodeList  TEXT               not null,"
+                          "    shipBonusSkillList TEXT               not null"
+                          ");")
