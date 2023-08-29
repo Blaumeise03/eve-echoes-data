@@ -50,7 +50,8 @@ def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str
         if key in schema:
             continue
         schema[key] = (snake_to_camel(key), to_type(attributes[key]["type"]))
-    schema["key"] = ("id", int)
+    if "key" not in schema:
+        schema["key"] = ("id", int)
     return schema
 
 
@@ -90,6 +91,8 @@ class EchoesDB:
             with open(merge_with_file, "r", encoding="utf-8") as f:
                 raw_extra = json.load(f)
         if auto_schema:
+            # Load json schema from the corresponding *.schema.json
+            # The keys will be converted to camelCase
             schema = load_schema(file=file.replace(".json", ".schema.json"),
                                  schema=schema)
             if merge_with_file:
@@ -99,33 +102,42 @@ class EchoesDB:
         if type(fields) == str:
             fields = fields.split(",")
         loaded = 0
-        for key, item in raw.items():
-            data = {schema["key"][0]: int(key)}
+        # iterate all items in file
+        for item_id, item in raw.items():
+            data = {schema["key"][0]: int(item_id)}
+            # Iterate all properties of the item
             for k, v in item.items():
                 if schema[k][1] is None:
+                    # Unknown data type
                     continue
+                # Check if property should get saved into the database
                 if fields is not None and schema[k][0] in fields:
                     data[schema[k][0]] = (schema[k][1])(v)
             if localized:
+                # Handle localized strings
                 for field, k in localized.items():
+                    # field is the column of the database, k the property key
                     if k in data:
                         string = data[k]
                     else:
                         string = item[k]
                     string_c = correct_string(string)
                     if string == string_c:
+                        # It is a normal string that can be handled directly
                         data[field] = self.get_localized_id(string, save_new=True, only_cache=True)
                     else:
                         # Handle strings like "{module_affix:联邦海军} {module:大型装甲连接模块}"
                         # The placeholder will get replaced with the ids,
-                        # e.g. "{43690} {3507}"
+                        # for example "{43690} {3507}".
+                        # The key will be set to -2 as multiple keys were used.
                         data[field] = -2
                         if k in data:
                             data[k] = self.correct_localized_string(string)
 
-            # Load extra data from additional file
-            if raw_extra and key in raw_extra:
-                for k, v in raw_extra[key].items():
+            # Load extra data from additional file.
+            # For example, the items have an additional item_dogma file with extra properties.
+            if raw_extra and item_id in raw_extra:
+                for k, v in raw_extra[item_id].items():
                     if schema[k][1] is None:
                         continue
                     if fields is not None and schema[k][0] in fields:
@@ -143,6 +155,7 @@ class EchoesDB:
     def load_all_dict_data(self,
                            root_path: str,
                            table: str,
+                           regex: Optional[re.Pattern] = None,
                            merge_with_file_path: Optional[str] = None,
                            auto_schema=True,
                            schema: Optional[Dict[str, Tuple[str, Type]]] = None,
@@ -152,9 +165,11 @@ class EchoesDB:
         directory = os.fsencode(root_path)
         logger.info("Loading data from dir %s into %s", root_path, table)
         count = 0
+        if regex is None:
+            regex = re.compile(r"\d+\.json")
         for file in os.listdir(directory):
             filename = os.fsdecode(file)
-            if not re.match(r"\d+\.json", filename):
+            if not re.match(regex, filename):
                 continue
             file_2 = None
             if merge_with_file_path and os.path.exists(f"{merge_with_file_path}/{filename}"):
@@ -163,6 +178,7 @@ class EchoesDB:
                 file=f"{root_path}/{filename}", table=table, merge_with_file=file_2, auto_schema=auto_schema,
                 schema=schema, fields=fields, default_values=default_values, localized=localized
             )
+            count += 1
         logger.info("Loaded %s files into %s from %s", count, table, root_path)
 
     def _insert_batch_data(self, table: str, key_field: str, value_field: str, batch: List[Tuple[Any, Any, Any]]):
@@ -265,6 +281,37 @@ class EchoesDB:
             string = string.replace(m.group(2), str(self.get_localized_id(m.group(2), save_new=True, only_cache=True)))
         return string
 
+    def load_item_attributes(self, file: str, table: str, columns: Tuple[str, str, str]):
+        with open(file, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        batch = []
+        for item_id, attrs in raw.items():
+            for attr, value in attrs.items():
+                batch.append((int(item_id), int(attr), value, value))
+        sql = f"INSERT INTO {table} ( {columns[0]}, {columns[1]}, {columns[2]} ) VALUES ( ?, ?, ? ) ON CONFLICT DO UPDATE SET {columns[2]}=?"
+        self.conn.executemany(sql, batch)
+        logger.info("Saved %s rows into table %s from file %s", len(batch), table, file)
+
+    def load_all_item_attributes(self,
+                                 root_path: str,
+                                 table: str,
+                                 columns: Tuple[str, str, str],
+                                 regex: Optional[re.Pattern] = None
+                                 ):
+        directory = os.fsencode(root_path)
+        logger.info("Loading data from dir %s into %s", root_path, table)
+        count = 0
+        if regex is None:
+            regex = re.compile(r"\d+\.json")
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if not re.match(regex, filename):
+                continue
+            self.load_item_attributes(file=f"{root_path}/{filename}", table=table, columns=columns)
+            count += 1
+        self.conn.commit()
+        logger.info("Saved %s files from %s into %s", count, root_path, table)
+
     def setup_tables(self):
         self.conn.execute("create table if not exists attributes("
                           "    id                   INTEGER             not null primary key,"
@@ -360,4 +407,17 @@ class EchoesDB:
                           "    normalDebris       TEXT               not null,"
                           "    shipBonusCodeList  TEXT               not null,"
                           "    shipBonusSkillList TEXT               not null"
+                          ");")
+        self.conn.execute("create table if not exists item_nanocores("
+                          "    itemId                  INTEGER not null primary key,"
+                          "    filmGroup               TEXT    not null,"
+                          "    filmQuality             INTEGER not null,"
+                          "    availableShips          TEXT    not null,"
+                          "    selectableModifierItems TEXT    not null,"
+                          "    trainableModifierItems  TEXT    not null);")
+        self.conn.execute("create table if not exists item_attributes ("
+                          "    itemId      INTEGER not null,"
+                          "    attributeId INTEGER not null,"
+                          "    value       REAL    not null,"
+                          "    primary key (itemId, attributeId)"
                           ");")

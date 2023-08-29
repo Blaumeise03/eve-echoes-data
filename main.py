@@ -39,8 +39,8 @@ if __name__ == '__main__':
         file="staticdata/staticdata/dogma/units.json", table="unit",
         fields="id,description,displayName,unitName"
     )
-    #for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
-    #    db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
+    for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
+        db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
     db.load_language(base_path="staticdata/staticdata/gettext", lang="zh", copy_to="source")
     db.load_localized_cache()
     db.load_dict_data(
@@ -55,6 +55,7 @@ if __name__ == '__main__':
         default_values={"groupIds": "[]"},
         fields="id,groupIds,localisedNameIndex,sourceName"
     )
+    # ToDo: find preSkill, maybe exp? not sure about this one
     db.load_all_dict_data(
         root_path="staticdata/staticdata/items", table="items",
         merge_with_file_path="staticdata/staticdata/items/item_dogma",
@@ -79,9 +80,20 @@ if __name__ == '__main__':
         },
         fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
     )
-    # ToDo: find preSkill, maybe exp? not sure about this one
+    db.load_dict_data(
+        file="staticdata/staticdata/items/item_nanocore.json", table="item_nanocores",
+        schema={
+            "key": ("itemId", int),
+            "main_affix": ("selectableModifierItems", str),
+            "sub_affix": ("trainableModifierItems", str),
+            "available_ship": ("availableShips", str)},
+        localized={},
+        default_values={"trainableModifierItems": "[]", "availableShips": "[]"},
+        fields="itemId,filmGroup,filmQuality,availableShips,selectableModifierItems,trainableModifierItems"
+    )
+    db.load_all_item_attributes(
+        root_path="staticdata/staticdata/dogma", regex=re.compile(r"type_attributes_\d+\.json"),
+        table="item_attributes", columns=("itemId", "attributeId", "value")
+    )
 
-    #conn = sqlite3.connect("echoes.db")
-    #db.conn.backup(target=conn)
-    #conn.close()
     db.conn.close()
