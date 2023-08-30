@@ -265,7 +265,7 @@ class EchoesDB:
         res = cursor.fetchall()
         for s_id, source in res:
             self.strings[source] = s_id
-        logger.info("Loaded %s localized strings into the database", len(res))
+        logger.info("Loaded %s localized strings into the cache", len(res))
 
     def save_localized_cache(self):
         if len(self.new_loc_cache) == 0:
@@ -290,6 +290,7 @@ class EchoesDB:
                 batch.append((int(item_id), int(attr), value, value))
         sql = f"INSERT INTO {table} ( {columns[0]}, {columns[1]}, {columns[2]} ) VALUES ( ?, ?, ? ) ON CONFLICT DO UPDATE SET {columns[2]}=?"
         self.conn.executemany(sql, batch)
+        self.conn.commit()
         logger.info("Saved %s rows into table %s from file %s", len(batch), table, file)
 
     def load_all_item_attributes(self,
@@ -421,3 +422,8 @@ class EchoesDB:
                           "    value       REAL    not null,"
                           "    primary key (itemId, attributeId)"
                           ");")
+        self.conn.execute("create table if not exists item_effects("
+                          "    itemId    INTEGER           not null,"
+                          "    effectId  INTEGER           not null,"
+                          "    isDefault INTEGER default 0 not null,"
+                          "    primary key (itemId, effectId));")
