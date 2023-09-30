@@ -3,8 +3,8 @@ import logging
 import os
 import re
 import sqlite3
-from sqlite3 import Error, Connection
-from typing import Dict, Any, Tuple, Type, Optional, List
+from sqlite3 import Error, Connection, Cursor
+from typing import Dict, Any, Tuple, Type, Optional, List, Union
 
 logger = logging.getLogger("ee.db")
 name_regexp = re.compile(r"(\{([a-zA-Z_-]+:)[^{}]+})")
@@ -41,6 +41,8 @@ def to_type(string: str) -> Type:
 
 
 def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str, Type]]:
+    if not os.path.exists(file):
+        return schema
     with open(file, "r") as f:
         raw = json.load(f)
     if schema is None:
@@ -82,7 +84,8 @@ class EchoesDB:
                        schema: Optional[Dict[str, Tuple[str, Type]]] = None,
                        fields: Optional[str] = None,
                        default_values: Optional[Dict[str, Any]] = None,
-                       localized: Optional[Dict[str, str]] = None):
+                       localized: Optional[Dict[str, str]] = None,
+                       dict_root_key: Optional[str] = None):
         logger.info("Loading data from file %s into %s", file, table)
         with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -102,9 +105,12 @@ class EchoesDB:
         if type(fields) == str:
             fields = fields.split(",")
         loaded = 0
+        if dict_root_key:
+            for k in dict_root_key.split("."):
+                raw = raw[k]
         # iterate all items in file
         for item_id, item in raw.items():
-            data = {schema["key"][0]: int(item_id)}
+            data = {schema["key"][0]: schema["key"][1](item_id)}
             # Iterate all properties of the item
             for k, v in item.items():
                 if schema[k][1] is None:
@@ -113,6 +119,9 @@ class EchoesDB:
                 # Check if property should get saved into the database
                 if fields is not None and schema[k][0] in fields:
                     data[schema[k][0]] = (schema[k][1])(v)
+                    # Replace  with
+                    if schema[k][1] == str:
+                        data[schema[k][0]] = data[schema[k][0]].replace("'", "\"")
             if localized:
                 # Handle localized strings
                 for field, k in localized.items():
@@ -313,6 +322,59 @@ class EchoesDB:
         self.conn.commit()
         logger.info("Saved %s files from %s into %s", count, root_path, table)
 
+    def init_item_mod(self, table: str, item_mod_data: List[Union[str, Any]], columns_order: List[str], cursor: Cursor):
+        def _clean(string: str) -> str:
+            return string.rstrip("[").lstrip("]").replace("\"", "").replace(" ", "")
+
+        sql = (f"INSERT INTO {table} ( "
+               "    code, typeCode, changeType, attributeOnly, "
+               "    changeRange, changeRangeModuleNameId, attributeId, attributeValue"
+               ") VALUES ( ?, ?, ?, ?, ?, ?, ?, ? ) "
+               "ON CONFLICT DO UPDATE SET "
+               "    typeCode=?, changeType=?, attributeOnly=?, "
+               "    changeRange=?, changeRangeModuleNameId=?, attributeId=?, attributeValue=?")
+        code = item_mod_data[columns_order.index("code")]
+        type_code = item_mod_data[columns_order.index("typeCode")]
+        attribute_only = item_mod_data[columns_order.index("attributeOnly")]
+        i = 0
+        for change_type, change_range, attr_id, attr_val in zip(
+                _clean(item_mod_data[columns_order.index("changeTypes")]).split(","),
+                _clean(item_mod_data[columns_order.index("changeRanges")]).split(","),
+                _clean(item_mod_data[columns_order.index("attributeIds")]).split(","),
+                _clean(item_mod_data[columns_order.index("attributes")]).split(",")
+                # ToDo: changeRangeModuleNames is missing
+        ):
+            cursor.execute(sql, (
+                code, type_code, change_type, attribute_only, change_range, 0, attr_id, attr_val,
+                type_code, change_type, attribute_only, change_range, 0, attr_id, attr_val
+            ))
+            i += 1
+        return i
+
+    def init_item_modifiers(self,
+                            table: str = "item_modifiers",
+                            table_def: str = "modifier_definition",
+                            table_val: str = "modifier_value"):
+        logger.info("Initializing %s from %s and %s", table, table_def, table_val)
+        cursor = self.conn.cursor()
+        logger.warning("Deleting contents from %s", table)
+        # noinspection SqlWithoutWhere
+        cursor.execute(f"DELETE FROM {table}")
+        cursor.execute("SELECT"
+                       "    mv.code, mv.attributes, mv.typeName as typeCode,"
+                       "    md.changeTypes, md.attributeOnly, md.changeRanges, md.changeRangeModuleNames, md.attributeIds "
+                       f"FROM {table_val} mv "
+                       f"LEFT JOIN {table_def} md on mv.typeName = md.code;")
+        data = cursor.fetchall()
+        logger.info("Collected %s data entries, inserting into %s", len(data), table)
+        columns = []
+        for col in cursor.description:
+            columns.append(col[0])
+        count = 0
+        for row in data:
+            count += self.init_item_mod(table, row, columns, cursor)
+        logger.info("Inserted %s item modifiers into %s", count, table)
+
     def setup_tables(self):
         self.conn.execute("create table if not exists attributes("
                           "    id                   INTEGER             not null primary key,"
@@ -427,3 +489,23 @@ class EchoesDB:
                           "    effectId  INTEGER           not null,"
                           "    isDefault INTEGER default 0 not null,"
                           "    primary key (itemId, effectId));")
+        self.conn.execute("create table if not exists modifier_definition("
+                          "    code                   TEXT    not null primary key,"
+                          "    changeTypes            TEXT    not null,"
+                          "    attributeOnly          INTEGER not null,"
+                          "    changeRanges           TEXT    not null,"
+                          "    changeRangeModuleNames TEXT    not null,"
+                          "    attributeIds           TEXT    not null);")
+        self.conn.execute("create table if not exists modifier_value("
+                          "    code       TEXT not null primary key,"
+                          "    attributes TEXT not null,"
+                          "    typeName   TEXT not null);")
+        self.conn.execute("create table if not exists item_modifiers("
+                          "    code                    TEXT    not null,"
+                          "    typeCode                TEXT    not null,"
+                          "    changeType              TEXT    not null,"
+                          "    attributeOnly           INTEGER not null,"
+                          "    changeRange             TEXT    not null,"
+                          "    changeRangeModuleNameId INTEGER not null,"
+                          "    attributeId             INTEGER not null,"
+                          "    attributeValue          REAL);")

@@ -21,7 +21,7 @@ console.setFormatter(formatter)
 logger.addHandler(console)
 logger.setLevel("INFO")
 
-ALLOWED_MODES = ["lang", "items", "item_attrs", "base"]
+ALLOWED_MODES = ["lang", "items", "item_attrs", "base", "modifier"]
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -130,7 +130,47 @@ if __name__ == '__main__':
             file="staticdata/staticdata/dogma/type_effects.json", table="item_effects",
             columns=("itemId", "effectId", "isDefault")
         )
+    if "modifier" in modes:
+        # Todo: changeRangeModuleNames is missing
+        db.load_dict_data(
+            file="staticdata/py_data/data_common/static/dogma/cal_code_modifier.json",
+            dict_root_key="data.meta",
+            table="modifier_definition",
+            schema={
+                "key": ("code", str),
+                "change_types": ("changeTypes", str),
+                "attribute_only": ("attributeOnly", bool),
+                "change_ranges": ("changeRanges", str),
+                "attribute_ids": ("attributeIds", str)
+            },
+            default_values={
+                "changeTypes": "[]",
+                "changeRanges": "[]",
+                "attributeIds": "[]",
+                "attributeOnly": False,
+                "changeRangeModuleNames": "[]"
+            },
+            fields="code,changeTypes,attributeOnly,changeRanges,attributeIds,changeRangeModuleNames"
+        )
+        db.load_dict_data(
+            file="staticdata/py_data/data_common/static/dogma/cal_code_modifier.json",
+            dict_root_key="data.code",
+            table="modifier_value",
+            schema={
+                "key": ("code", str),
+                "attributes": ("attributes", str),
+                "type_name": ("typeName", str),
+            },
+            fields="code,attributes,typeName"
+        )
+        db.init_item_modifiers()
+
     # ToDo: Find item_bonus_text
     # The descSpecial ids are aleady inside the items table, but the corresponding localisation ids are missing
+
+    # modifier_definition staticdata\py_data\data_common\static\dogma\cal_code_modifier.json
+    # modifier_value staticdata\py_data\data_common\static\dogma\cal_code_modifier.json
+    # npc_equipment staticdata\py_data\data_common\static\dogma\npc_equipment.json
+    #
 
     db.conn.close()
