@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 import re
@@ -5,7 +6,11 @@ import sqlite3
 import sys
 from collections import defaultdict
 
-from echoes_data import database
+# noinspection PyUnresolvedReferences
+from colorama import just_fix_windows_console
+
+from echoes_data import database, universe
+from echoes_data.universe import UniverseLoader
 
 logger = logging.getLogger()
 formatter = logging.Formatter(fmt="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s")
@@ -23,25 +28,16 @@ logger.setLevel("INFO")
 
 ALLOWED_MODES = ["lang", "items", "item_attrs", "base", "modifier"]
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Patch notes scrapper for the game Eve Echoes")
+    parser.add_argument("-m", "--mode",
+                        type=str, nargs="+", choices=["lang", "items", "item_attrs", "base", "modifier", "universe"])
+    args = parser.parse_args()
+    just_fix_windows_console()
     db = database.EchoesDB()
     db.create_connection("echoes.db")
     db.setup_tables()
-    print(sys.argv)
-    modes = ALLOWED_MODES
-    _arg_status = 0
-    for arg in sys.argv:
-        if arg.startswith("-"):
-            _arg_status = 0
-        if arg == "-m":
-            _arg_status = 1
-            modes = []
-            continue
-        if _arg_status == 1:
-            if arg not in ALLOWED_MODES:
-                raise Exception(f"Unknown import mode '{arg}'")
-            modes.append(arg)
+    modes = args.mode
 
     if "base" in modes:
         db.load_dict_data(
@@ -166,11 +162,58 @@ if __name__ == '__main__':
         db.init_item_modifiers()
 
     # ToDo: Find item_bonus_text
-    # The descSpecial ids are aleady inside the items table, but the corresponding localisation ids are missing
+    # The descSpecial ids are already inside the items table, but the corresponding localisation ids are missing
 
-    # modifier_definition staticdata\py_data\data_common\static\dogma\cal_code_modifier.json
-    # modifier_value staticdata\py_data\data_common\static\dogma\cal_code_modifier.json
-    # npc_equipment staticdata\py_data\data_common\static\dogma\npc_equipment.json
-    #
+    # ToDo: add npc_equipment import from staticdata\py_data\data_common\static\dogma\npc_equipment.json
+
+    # ToDo: Find market_group
+
+    # ToDo: Find ship_modes
+    # ToDo: Find ship_nanocore
+
+    if "universe" in modes:
+        uni_loader = UniverseLoader(db)
+        uni_loader.setup_tables()
+        uni_loader.load_texts("staticdata/sigmadata/eve/universe/gettext.json")
+        uni_loader.load_data(
+            file_path="staticdata/sigmadata/eve/universe/regions.json",
+            table="regions",
+            columns=["id", "name", "x", "y", "z", "faction_id", "wormhole_class_id"])
+        uni_loader.load_data(
+            file_path="staticdata/sigmadata/eve/universe/constellations.json",
+            table="constellations",
+            columns=["id", "name", "x", "y", "z", "faction_id", "radius", "wormhole_class_id"])
+        uni_loader.load_data(
+            file_path="staticdata/sigmadata/eve/universe/solar_systems.json",
+            table="solarsystems",
+            columns=["id", "name", "x", "y", "z", "security", "faction_id", "radius", "region_id", "constellation_id"],
+            extra_task=universe.add_solarsystem_neighbours)
+        uni_loader.load_item_types(
+            path_item_type="staticdata/script/data_common/static/item/item_type.py",
+            path_item_types_by_group="staticdata/staticdata/items/item_types_by_group.json",
+            path_type_id_mapping="staticdata/py_data/data_common/static/item/type_id_mapping.json")
+        uni_loader.load_group_id_cache()
+        uni_loader.load_system_cache()
+        uni_loader.load_data(
+            file_path="staticdata/sigmadata/eve/universe/stars.json",
+            table="celestials",
+            columns=["id", "name",
+                     # Compatible
+                     ("type_id", lambda cel: uni_loader.type_to_short_id[cel["type_id"]]),
+                     ("group_id", lambda cel: uni_loader.type_to_group_id[cel["type_id"]]),
+                     ("system_id", "solar_system_id"), "orbit_id", "x", "y", "z", "radius",
+                     "celestial_index", "orbit_index"],
+            name_func=uni_loader.get_celestial_name,
+            cache_celestials=True)
+        uni_loader.load_data(
+            file_path="staticdata/sigmadata/eve/universe/celestials.json",
+            table="celestials",
+            columns=["id", "name",
+                     ("type_id", lambda cel: uni_loader.type_to_short_id[cel["type_id"]]),
+                     ("group_id", lambda cel: uni_loader.type_to_group_id[cel["type_id"]]),
+                     ("system_id", "solar_system_id"), "orbit_id", "x", "y", "z", "radius",
+                     "celestial_index", "orbit_index"],
+            name_func=uni_loader.get_celestial_name,
+            cache_celestials=True, loading_bar=True)
 
     db.conn.close()

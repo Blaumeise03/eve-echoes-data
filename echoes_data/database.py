@@ -59,6 +59,7 @@ def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str
 
 class EchoesDB:
     def __init__(self) -> None:
+        self.strings_en = {}  # type: Dict[int, str]
         self.conn = None  # type: Connection | None
         self.strings = {}  # type: Dict[str, int]
         self.new_loc_cache = {}
@@ -268,12 +269,26 @@ class EchoesDB:
         self.strings[zh_name] = res[0]
         return res[0]
 
+    def get_localized_string(self, zh_name: str, return_def=True):
+        # cursor = self.conn.cursor()
+        # cursor.execute("SELECT en FROM localised_strings WHERE source=?;", (zh_name,))
+        # res = cursor.fetchone()
+        # if res is None:
+        #     return None
+        # return res[0]
+        if zh_name not in self.strings:
+            if return_def:
+                return zh_name
+            return None
+        return self.strings_en[self.strings[zh_name]]
+
     def load_localized_cache(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, source FROM localised_strings")
+        cursor.execute("SELECT id, source, en FROM localised_strings")
         res = cursor.fetchall()
-        for s_id, source in res:
+        for s_id, source, en in res:
             self.strings[source] = s_id
+            self.strings_en[s_id] = en
         logger.info("Loaded %s localized strings into the cache", len(res))
 
     def save_localized_cache(self):
@@ -433,20 +448,30 @@ class EchoesDB:
                           "    zhcn   TEXT);")
         self.conn.execute("create table if not exists groups("
                           "    id                   INTEGER primary key,"
-                          "    anchorable           INTEGER not null,"
-                          "    anchored             INTEGER not null,"
-                          "    fittableNonSingleton INTEGER not null,"
+                          "    name                 TEXT    null,"
+                          "    anchorable           INTEGER not null default 0,"
+                          "    anchored             INTEGER not null default 0,"
+                          "    fittableNonSingleton INTEGER not null default 0,"
                           "    iconPath             TEXT,"
-                          "    useBasePrice         INTEGER not null,"
-                          "    localisedNameIndex   INTEGER not null,"
+                          "    useBasePrice         INTEGER not null default 0,"
+                          "    localisedNameIndex   INTEGER not null default 0,"
                           "    sourceName           TEXT,"
                           "    itemIds              TEXT );")
         self.conn.execute("create table if not exists categories("
                           "    id                 INTEGER primary key,"
-                          "    groupIds           TEXT,"
+                          "    name               TEXT    null,"
+                          "    groupIds           TEXT    default '[]',"
                           "    localisedNameIndex INTEGER default 0 not null,"
                           "    sourceName         TEXT"
                           ");")
+        self.conn.execute("create table if not exists types("
+                          "    id       INTEGER primary key,"
+                          "    short_id INTEGER null UNIQUE,"
+                          "    name     TEXT    null,"
+                          "    group_id INTEGER null,"
+                          "    constraint key_types_groups"
+                          "        foreign key (group_id) references groups (id)"
+                          "            on delete cascade)")
         self.conn.execute("create table if not exists items("
                           "    id                 INTEGER primary key,"
                           "    canBeJettisoned    INTEGER            not null,"
