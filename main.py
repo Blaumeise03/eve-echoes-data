@@ -31,7 +31,7 @@ ALLOWED_MODES = ["lang", "items", "item_attrs", "base", "modifier"]
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Patch notes scrapper for the game Eve Echoes")
     parser.add_argument("-m", "--mode",
-                        type=str, nargs="+", choices=["lang", "items", "item_attrs", "base", "modifier", "universe"])
+                        type=str, nargs="+", choices=["lang", "items", "item_attrs", "base", "modifier", "universe", "planet_exploit"])
     args = parser.parse_args()
     just_fix_windows_console()
     db = database.EchoesDB()
@@ -171,6 +171,7 @@ if __name__ == '__main__':
     # ToDo: Find ship_modes
     # ToDo: Find ship_nanocore
 
+    uni_loader = None
     if "universe" in modes:
         uni_loader = UniverseLoader(db)
         uni_loader.setup_tables()
@@ -215,5 +216,10 @@ if __name__ == '__main__':
                      "celestial_index", "orbit_index"],
             name_func=uni_loader.get_celestial_name,
             cache_celestials=True, loading_bar=True)
+    if "planet_exploit" in modes:
+        if uni_loader is None:
+            uni_loader = UniverseLoader(db)
+            uni_loader.setup_tables()
+        uni_loader.load_planetary_production("staticdata/manual_staticdata/universe/planet_exploit_resource.json")
 
     db.conn.close()

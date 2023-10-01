@@ -3,7 +3,7 @@ import json
 import logging
 from collections import defaultdict
 from sqlite3 import Cursor
-from typing import Dict, List, Any, Optional, Callable, DefaultDict
+from typing import Dict, List, Any, Optional, Callable, DefaultDict, Union
 
 from echoes_data import utils
 from echoes_data.database import EchoesDB
@@ -260,6 +260,35 @@ class UniverseLoader:
             logger.warning("Did not find these keys in file %s: %s", file_path, not_found)
         logger.info("Inserted %s entries into %s", len(raw), table)
 
+    def load_planetary_production(self, file_path: str):
+        logger.info("Loading planetary production data from %s", file_path)
+        with open(file_path, "r", encoding="utf-8") as file:
+            raw = json.load(file)
+        curser = self.cursor()
+        num = len(raw)
+        logger.info("Loaded %s planets, inserting into database", num)
+        utils.print_loading_bar(0)
+        i = 0
+        j = 0
+        sql = ("INSERT OR REPLACE INTO planet_exploit "
+               "    (planet_id, type_id, output, richness, richness_value, location_index) "
+               "    VALUES ( ?, ?, ?, ?, ?, ?)")
+        RICHNESS = ['poor', 'medium', 'rich', 'perfect']
+        for planet in raw.values():  # type: Dict[str, Any]
+            p_id = planet["planet_id"]
+            for res in planet["resource_info"].values():  # type: Dict[str, Union[int, float]]
+                rich_i = res["richness_index"]
+                curser.execute(
+                    sql,
+                    (p_id, res["resource_type_id"], res["init_output"], RICHNESS[rich_i - 1],
+                     res["richness_value"], res["location_index"]))
+                j += 1
+            if i % 1000 == 0:
+                utils.print_loading_bar(i / num)
+            i += 1
+        self.db.conn.commit()
+        logger.info("Inserted %s resources from %s planets into the database", j, num)
+
     def setup_tables(self):
         logger.info("Creating universe tables")
         self.db.conn.execute("create table if not exists regions ("
@@ -335,4 +364,17 @@ class UniverseLoader:
                              "            on delete cascade,"
                              "    constraint key_celest_celest"
                              "        foreign key (orbit_id) references celestials (id)"
+                             "            on delete cascade)")
+        self.db.conn.execute("create table if not exists planet_exploit("
+                             "    planet_id      int    not null,"
+                             "    type_id        bigint not null,"
+                             "    output         float  not null,"
+                             "    richness       text  CHECK(richness in ('poor', 'medium', 'rich', 'perfect')) not null,"
+                             "    richness_value int    not null,"
+                             "    location_index int    not null,"
+                             "    primary key (planet_id, type_id),"
+                             "    constraint key_planex_item"
+                             "        foreign key (type_id) references items (id),"
+                             "    constraint key_planex_planet"
+                             "        foreign key (planet_id) references celestials (id)"
                              "            on delete cascade)")
