@@ -7,10 +7,15 @@
 
 This tool is designed to export static data from the game. This tool does NOT decompile/extract data from the APK. The
 apk has to be already extracted/decompiled. To do so, use [xforce/eve-echoes-tools](https://github.com/xforce/eve-echoes-tools).
-I will provide detailed instructions on how to install `eve-echoes-tools` in the future.
+The data gets exported into a sqlite3 database called `echoes.db`.
 
-At the moment this tool is capable of exporting the following data (the data should be compatible with the S.W.E.E.T db
-format, but is not completed/tested):
+> At the moment of writing, `xforce/eve-echoes-tools` is broken. Please use my forks of [eve-echoes-tools](https://github.com/blaumeis03/eve-echoes-tools)
+> **AND** [neox-tools](https://github.com/blaumeis03/neox-tools) (it is crucial to use the lates version of neox-tools, the old one is broken).
+>
+> The `eve-echoes-tools` also contains detailed installation and usage instruction.
+
+At the moment this tool is capable of exporting the following data (the data should be compatible with the SWEET db
+format, but is not completed/tested at the moment):
 ```
 Items/module data:
     items (all items from the game)
@@ -30,7 +35,8 @@ Universe data:
     plane_exploit (planetary production)
 ```
 
-Instructions on how to use it will follow, for now just make sure you have the following directory structure:
+Instructions on how to use it will follow, for now just make sure you have the following directory structure
+> Copy the required files/directory or the whole `staticdata` directory from `eve-echoes-tools`
 ```
 eve-echoes-data/ (this folder name doesn't matter)
     main.py and other stuff from this repo
@@ -53,3 +59,5 @@ e.g.
 ```shell
 python main.py -m items lang base universe planet_exploit
 ```
+This will export the data into an sqlite3 database.
+You can find usefull SQL commands in [useful_sql_cmds.md](useful_sql_cmds.md).
