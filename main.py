@@ -9,7 +9,7 @@ from collections import defaultdict
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
 
-from echoes_data import database, universe
+from echoes_data import database, universe, tables_setup
 from echoes_data.universe import UniverseLoader
 
 logger = logging.getLogger()
@@ -25,38 +25,27 @@ console.setLevel(logging.DEBUG)
 console.setFormatter(formatter)
 logger.addHandler(console)
 logger.setLevel("INFO")
-
-ALLOWED_MODES = ["lang", "items", "item_attrs", "base", "modifier"]
+ALL_MODES = ["lang", "items", "item_attrs", "base", "modifier", "universe", "planet_exploit"]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Patch notes scrapper for the game Eve Echoes")
     parser.add_argument("-m", "--mode",
-                        type=str, nargs="+", choices=["lang", "items", "item_attrs", "base", "modifier", "universe", "planet_exploit"])
+                        type=str, nargs="+", choices=ALL_MODES,
+                        default=ALL_MODES)
+    parser.add_argument("--legacy", action=argparse.BooleanOptionalAction,
+                        help="Uses the legacy db format from sweet")
+
     args = parser.parse_args()
     just_fix_windows_console()
     db = database.EchoesDB()
     db.create_connection("echoes.db")
-    db.setup_tables()
+    logger.info("Setting up tables")
+    tables_setup.setup_basic_tables(db.conn, sweet_compatible=args.legacy)
+    tables_setup.setup_universe_tables(db.conn)
+    uni_loader = UniverseLoader(db)
+
     modes = args.mode
 
-    if "base" in modes:
-        db.load_dict_data(
-            file="staticdata/staticdata/dogma/attributes.json", table="attributes",
-            schema={"operator": ("attributeOperator", str), "to_attr_id": ("toAttrId", str)},
-            fields="id,attributeCategory,attributeName,available,chargeRechargeTimeId,defaultValue,highIsGood,"
-                   "maxAttributeId,attributeOperator,stackable,toAttrId,unitId,unitLocalisationKey,attributeSourceUnit,"
-                   "attributeTip,attributeSourceName,nameLocalisationKey,tipLocalisationKey,attributeFormula"
-        )
-        db.load_dict_data(
-            file="staticdata/staticdata/dogma/effects.json", table="effects",
-            fields="id,disallowAutoRepeat,dischargeAttributeId,durationAttributeId,effectCategory,effectName,"
-                   "electronicChance,falloffAttributeId,fittingUsageChanceAttributeId,guid,isAssistance,isOffensive,"
-                   "isWarpSafe,rangeAttributeId,rangeChance,trackingSpeedAttributeId"
-        )
-        db.load_dict_data(
-            file="staticdata/staticdata/dogma/units.json", table="unit",
-            fields="id,description,displayName,unitName"
-        )
     if "lang" in modes:
         for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
             db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
@@ -77,6 +66,28 @@ if __name__ == '__main__':
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
             default_values={"groupIds": "[]"},
             fields="id,groupIds,localisedNameIndex,sourceName"
+        )
+        uni_loader.load_item_types(
+            path_item_type="staticdata/script/data_common/static/item/item_type.py",
+            path_item_types_by_group="staticdata/staticdata/items/item_types_by_group.json",
+            path_type_id_mapping="staticdata/py_data/data_common/static/item/type_id_mapping.json")
+        db.load_dict_data(
+            file="staticdata/staticdata/dogma/units.json", table="unit",
+            fields="id,description,displayName,unitName"
+        )
+    if "item_attrs" in modes:
+        db.load_dict_data(
+            file="staticdata/staticdata/dogma/attributes.json", table="attributes",
+            schema={"operator": ("attributeOperator", str), "to_attr_id": ("toAttrId", str)},
+            fields="id,attributeCategory,attributeName,available,chargeRechargeTimeId,defaultValue,highIsGood,"
+                   "maxAttributeId,attributeOperator,stackable,toAttrId,unitId,unitLocalisationKey,attributeSourceUnit,"
+                   "attributeTip,attributeSourceName,nameLocalisationKey,tipLocalisationKey,attributeFormula"
+        )
+        db.load_dict_data(
+            file="staticdata/staticdata/dogma/effects.json", table="effects",
+            fields="id,disallowAutoRepeat,dischargeAttributeId,durationAttributeId,effectCategory,effectName,"
+                   "electronicChance,falloffAttributeId,fittingUsageChanceAttributeId,guid,isAssistance,isOffensive,"
+                   "isWarpSafe,rangeAttributeId,rangeChance,trackingSpeedAttributeId"
         )
     if "items" in modes:
         # ToDo: find preSkill, maybe exp? not sure about this one
@@ -104,7 +115,6 @@ if __name__ == '__main__':
             },
             fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
         )
-    if "base" in modes:
         db.load_dict_data(
             file="staticdata/staticdata/items/item_nanocore.json", table="item_nanocores",
             schema={
@@ -121,7 +131,6 @@ if __name__ == '__main__':
             root_path="staticdata/staticdata/dogma", regex=re.compile(r"type_attributes_\d+\.json"),
             table="item_attributes", columns=("itemId", "attributeId", "value")
         )
-    if "base" in modes:
         db.load_item_attributes(
             file="staticdata/staticdata/dogma/type_effects.json", table="item_effects",
             columns=("itemId", "effectId", "isDefault")
@@ -164,17 +173,14 @@ if __name__ == '__main__':
     # ToDo: Find item_bonus_text
     # The descSpecial ids are already inside the items table, but the corresponding localisation ids are missing
 
-    # ToDo: add npc_equipment import from staticdata\py_data\data_common\static\dogma\npc_equipment.json
+    # ToDo: Add npc_equipment import from staticdata\py_data\data_common\static\dogma\npc_equipment.json
 
     # ToDo: Find market_group
 
     # ToDo: Find ship_modes
     # ToDo: Find ship_nanocore
 
-    uni_loader = None
     if "universe" in modes:
-        uni_loader = UniverseLoader(db)
-        uni_loader.setup_tables()
         uni_loader.load_texts("staticdata/sigmadata/eve/universe/gettext.json")
         uni_loader.load_data(
             file_path="staticdata/sigmadata/eve/universe/regions.json",
@@ -189,10 +195,6 @@ if __name__ == '__main__':
             table="solarsystems",
             columns=["id", "name", "x", "y", "z", "security", "faction_id", "radius", "region_id", "constellation_id"],
             extra_task=universe.add_solarsystem_neighbours)
-        uni_loader.load_item_types(
-            path_item_type="staticdata/script/data_common/static/item/item_type.py",
-            path_item_types_by_group="staticdata/staticdata/items/item_types_by_group.json",
-            path_type_id_mapping="staticdata/py_data/data_common/static/item/type_id_mapping.json")
         uni_loader.load_group_id_cache()
         uni_loader.load_system_cache()
         uni_loader.load_data(
@@ -217,9 +219,6 @@ if __name__ == '__main__':
             name_func=uni_loader.get_celestial_name,
             cache_celestials=True, loading_bar=True)
     if "planet_exploit" in modes:
-        if uni_loader is None:
-            uni_loader = UniverseLoader(db)
-            uni_loader.setup_tables()
         uni_loader.load_planetary_production("staticdata/manual_staticdata/universe/planet_exploit_resource.json")
 
     db.conn.close()

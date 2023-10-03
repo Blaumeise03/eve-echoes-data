@@ -1,4 +1,5 @@
 venv/
 staticdata/
 .idea/
-echoes.db
+*.db
+*.uml
