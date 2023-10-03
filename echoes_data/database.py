@@ -1,11 +1,13 @@
+import functools
 import json
 import logging
 import os
 import re
 import sqlite3
 from collections import defaultdict
+from contextlib import closing
 from sqlite3 import Error, Connection, Cursor
-from typing import Dict, Any, Tuple, Type, Optional, List, Union
+from typing import Dict, Any, Tuple, Type, Optional, List, Union, Callable
 
 logger = logging.getLogger("ee.db")
 name_regexp = re.compile(r"(\{([a-zA-Z_-]+:)[^{}]+})")
@@ -62,6 +64,16 @@ def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str
     return schema
 
 
+def context_cursor(func: Callable):
+    @functools.wraps(func)
+    def _wrapper(*args, **kwargs):
+        # args[0] is self = EchoesDB
+        with closing(args[0].conn.cursor()) as cursor:
+            res = func(args[0], cursor, *args[1:], **kwargs)
+        return res
+    return _wrapper
+
+
 class EchoesDB:
     def __init__(self) -> None:
         self.strings_en = {}  # type: Dict[int, str]
@@ -76,13 +88,15 @@ class EchoesDB:
         except Error as e:
             logger.error("Error while opening database", exc_info=e)
 
-    def _insert_data(self, table: str, data: Dict[str, Any]):
+    def _insert_data(self, table: str, data: Dict[str, Any], cursor: Cursor):
         placeholders = ', '.join(['?'] * len(data))
         columns = ', '.join(data.keys())
         sql = "REPLACE INTO %s ( %s ) VALUES ( %s )" % (table, columns, placeholders)
-        self.conn.execute(sql, list(data.values()))
+        cursor.execute(sql, list(data.values()))
 
+    @context_cursor
     def load_dict_data(self,
+                       cursor: Cursor,
                        file: str,
                        table: str,
                        merge_with_file: Optional[str] = None,
@@ -161,7 +175,7 @@ class EchoesDB:
                 for field, v in default_values.items():
                     if field not in data:
                         data[field] = v
-            self._insert_data(table, data)
+            self._insert_data(table, data, cursor)
             loaded += 1
         self.conn.commit()
         logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
@@ -196,10 +210,11 @@ class EchoesDB:
             count += 1
         logger.info("Loaded %s files into %s from %s", count, table, root_path)
 
-    def _insert_batch_data(self, table: str, key_field: str, value_field: str, batch: List[Tuple[Any, Any, Any]]):
+    @context_cursor
+    def _insert_batch_data(self, cursor: Cursor, table: str, key_field: str, value_field: str, batch: List[Tuple[Any, Any, Any]]):
         sql = "INSERT INTO %s ( %s, %s ) VALUES ( ?, ? ) ON CONFLICT( %s ) DO UPDATE SET %s=?" % (
             table, key_field, value_field, key_field, value_field)
-        self.conn.executemany(sql, batch)
+        cursor.executemany(sql, batch)
 
     def load_simple_data(self,
                          file: str,
@@ -247,22 +262,21 @@ class EchoesDB:
             count += 1
         logger.info("Loaded %s language files for language %s", count, lang)
 
-    def get_next_loc_id(self):
+    @context_cursor
+    def get_next_loc_id(self, cursor):
         start = 5000000000
-        cursor = self.conn.cursor()
         cursor.execute("SELECT id FROM localised_strings WHERE id>=? ORDER BY ID DESC LIMIT 1;", (start,))
         res = cursor.fetchone()
         if res is not None:
             start = res[0] + 1
         return start
 
-    def get_localized_id(self, zh_name: str, save_new=False, only_cache=True) -> int:
+    @context_cursor
+    def get_localized_id(self, cursor: Cursor, zh_name: str, save_new=False, only_cache=True) -> int:
         if zh_name in self.strings:
             return self.strings[zh_name]
         res = None
-        cursor = None
         if not only_cache:
-            cursor = self.conn.cursor()
             cursor.execute("SELECT id FROM localised_strings WHERE source=?;", (zh_name,))
             res = cursor.fetchone()
         if res is None:
@@ -294,8 +308,8 @@ class EchoesDB:
             return None
         return self.strings_en[self.strings[zh_name]]
 
-    def load_localized_cache(self):
-        cursor = self.conn.cursor()
+    @context_cursor
+    def load_localized_cache(self, cursor):
         cursor.execute("SELECT id, source, en FROM localised_strings")
         res = cursor.fetchall()
         for s_id, source, en in res:
@@ -317,7 +331,8 @@ class EchoesDB:
             string = string.replace(m.group(2), str(self.get_localized_id(m.group(2), save_new=True, only_cache=True)))
         return string
 
-    def load_item_attributes(self, file: str, table: str, columns: Tuple[str, str, str]):
+    @context_cursor
+    def load_item_attributes(self, cursor, file: str, table: str, columns: Tuple[str, str, str]):
         with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
         batch = []
@@ -325,7 +340,7 @@ class EchoesDB:
             for attr, value in attrs.items():
                 batch.append((int(item_id), int(attr), value, value))
         sql = f"INSERT INTO {table} ( {columns[0]}, {columns[1]}, {columns[2]} ) VALUES ( ?, ?, ? ) ON CONFLICT DO UPDATE SET {columns[2]}=?"
-        self.conn.executemany(sql, batch)
+        cursor.executemany(sql, batch)
         self.conn.commit()
         logger.info("Saved %s rows into table %s from file %s", len(batch), table, file)
 
@@ -378,12 +393,12 @@ class EchoesDB:
             i += 1
         return i
 
-    def init_item_modifiers(self,
+    @context_cursor
+    def init_item_modifiers(self, cursor,
                             table: str = "item_modifiers",
                             table_def: str = "modifier_definition",
                             table_val: str = "modifier_value"):
         logger.info("Initializing %s from %s and %s", table, table_def, table_val)
-        cursor = self.conn.cursor()
         logger.warning("Deleting contents from %s", table)
         # noinspection SqlWithoutWhere
         cursor.execute(f"DELETE FROM {table}")
@@ -402,12 +417,12 @@ class EchoesDB:
             count += self.init_item_mod(table, row, columns, cursor)
         logger.info("Inserted %s item modifiers into %s", count, table)
 
-    def load_reprocess(self, file_path: str):
+    @context_cursor
+    def load_reprocess(self, cursor, file_path: str):
         logger.info("Loading reprocess data from %s", file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
         raw = raw["data"]["item_baseartifice"]
-        cursor = self.conn.cursor()
         re_id = re.compile(r"item_id(\d)")
         re_num = re.compile(r"item_number(\d)")
         sql = "INSERT OR REPLACE INTO reprocess (itemId, resultId, quantity) VALUES ( ?, ?, ?)"
@@ -433,12 +448,12 @@ class EchoesDB:
         self.conn.commit()
         logger.info("Inserted %s rows into reprocess", i)
 
-    def load_manufacturing(self, file_path: str):
+    @context_cursor
+    def load_manufacturing(self, cursor, file_path: str):
         logger.info("Loading manufacturing data from %s", file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
         raw = raw["data"]["item_manufacturing"]
-        cursor = self.conn.cursor()
         sql_bp = ("INSERT OR REPLACE INTO blueprints "
                   " (blueprintId, productId, outputNum, skillLvl, materialAmendAtt, decryptorMul, money, time, timeAmendAtt, type) "
                   " VALUES ( ?,?,?,?,?,?,?,?,?,?)")
