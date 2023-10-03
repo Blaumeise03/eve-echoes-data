@@ -3,12 +3,17 @@ import logging
 import os
 import re
 import sqlite3
+from collections import defaultdict
 from sqlite3 import Error, Connection, Cursor
 from typing import Dict, Any, Tuple, Type, Optional, List, Union
 
 logger = logging.getLogger("ee.db")
 name_regexp = re.compile(r"(\{([a-zA-Z_-]+:)[^{}]+})")
 name_corrected_regexp = re.compile(r"(\{[^{}]+})")
+
+
+class DataException(Exception):
+    pass
 
 
 def decapitalize(s, upper_rest=False):
@@ -204,15 +209,22 @@ class EchoesDB:
                          key_type: Type = int,
                          value_type: Type = str,
                          second_value_field: Optional[str] = None,
-                         save_lang=False):
+                         save_lang=False,
+                         root_key: Optional[str] = None,
+                         logging=False):
         batch = []
         with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
+        if root_key is not None:
+            for k in root_key.split("."):
+                raw = raw[k]
         for key, value in raw.items():
             batch.append((key_type(key), value_type(value), value_type(value)))
             if save_lang:
                 self.strings[value_type(value)] = key_type(key)
         self._insert_batch_data(table, key_field, value_field, batch)
+        if logging:
+            logger.info("Inserted %s rows from %s : %s into %s", len(batch), file, root_key, table)
         if second_value_field:
             self._insert_batch_data(table, key_field, second_value_field, batch)
         self.conn.commit()
@@ -390,3 +402,86 @@ class EchoesDB:
             count += self.init_item_mod(table, row, columns, cursor)
         logger.info("Inserted %s item modifiers into %s", count, table)
 
+    def load_reprocess(self, file_path: str):
+        logger.info("Loading reprocess data from %s", file_path)
+        with open(file_path, "r", encoding="utf-8") as file:
+            raw = json.load(file)
+        raw = raw["data"]["item_baseartifice"]
+        cursor = self.conn.cursor()
+        re_id = re.compile(r"item_id(\d)")
+        re_num = re.compile(r"item_number(\d)")
+        sql = "INSERT OR REPLACE INTO reprocess (itemId, resultId, quantity) VALUES ( ?, ?, ?)"
+        i = 0
+        for item_id, data in raw.items():  # type: str, Dict[str, int]
+            item_id = int(item_id)  # type: int
+            reprocess_items = {}  # type: Dict[int, int]
+            reprocess_values = {}
+            for k, v in data.items():
+                match = re_id.match(k)
+                if match:
+                    reprocess_items[int(match.group(1))] = v
+                    continue
+                match = re_num.match(k)
+                if match:
+                    reprocess_values[int(match.group(1))] = v
+            for num, quantity in reprocess_values.items():
+                if quantity <= 0:
+                    continue
+                result_id = reprocess_items[num]
+                cursor.execute(sql, (item_id, result_id, quantity))
+                i += 1
+        self.conn.commit()
+        logger.info("Inserted %s rows into reprocess", i)
+
+    def load_manufacturing(self, file_path: str):
+        logger.info("Loading manufacturing data from %s", file_path)
+        with open(file_path, "r", encoding="utf-8") as file:
+            raw = json.load(file)
+        raw = raw["data"]["item_manufacturing"]
+        cursor = self.conn.cursor()
+        sql_bp = ("INSERT OR REPLACE INTO blueprints "
+                  " (blueprintId, productId, outputNum, skillLvl, materialAmendAtt, decryptorMul, money, time, timeAmendAtt, type) "
+                  " VALUES ( ?,?,?,?,?,?,?,?,?,?)")
+        sql_cost = "INSERT OR REPLACE INTO blueprint_costs (blueprintId, resourceId, amount, type) VALUES (?,?,?,?)"
+        b = 0
+        c = 0
+        species = {
+            "module_species": "mod",
+            "planetary_material_species": "pi",
+            "minerals_species": "mins",
+            "ship_species": "ship",
+            "component_species": "comp",
+            "blueprint_species": "bp",
+            "datacore_species": "data",
+            "salvage_material_species": "salv"
+        }
+        re_species = re.compile(r"[a-zA-z_]+_species")
+        for res_id, bp_data in raw.items():  # type: str, Dict[str, Any]
+            res_id = int(res_id)  # type: int
+            bp_id = int(bp_data["blueprint"])
+            if res_id != int(bp_data["product_type_id"]):
+                raise DataException(
+                    f"Blueprint for item {res_id} has wront product type: {int(bp_data['product_type_id'])}")
+            cursor.execute(sql_bp, (
+                bp_id,
+                res_id,
+                bp_data["output_num"],
+                bp_data["skill_level"],
+                bp_data["material_amend_att"],
+                bp_data["decryptor_mul"],
+                bp_data["money"],
+                bp_data["time"],
+                bp_data["time_amend_att"],
+                bp_data["type"]
+            ))
+            b += 1
+            for mat_id, quantity in bp_data["material"].items():  # type: str, int
+                mat_type = None
+                for k in bp_data:
+                    if re_species.match(k):
+                        if mat_id in bp_data[k]:
+                            mat_type = species[k]
+                cursor.execute(sql_cost, (bp_id, int(mat_id), quantity, mat_type))
+                c += 1
+        self.conn.commit()
+        logger.info("Inserted %s blueprints with %s costs into blueprints and blueprint_cost", b, c)

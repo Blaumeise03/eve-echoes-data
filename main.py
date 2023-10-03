@@ -1,10 +1,7 @@
 import argparse
 import logging
-import os
 import re
-import sqlite3
 import sys
-from collections import defaultdict
 
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
@@ -25,7 +22,7 @@ console.setLevel(logging.DEBUG)
 console.setFormatter(formatter)
 logger.addHandler(console)
 logger.setLevel("INFO")
-ALL_MODES = ["lang", "items", "item_attrs", "base", "modifier", "universe", "planet_exploit"]
+ALL_MODES = ["lang", "items", "item_extra", "item_attrs", "bps", "base", "modifier", "universe", "planet_exploit"]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Patch notes scrapper for the game Eve Echoes")
@@ -125,6 +122,34 @@ if __name__ == '__main__':
             localized={},
             default_values={"trainableModifierItems": "[]", "availableShips": "[]"},
             fields="itemId,filmGroup,filmQuality,availableShips,selectableModifierItems,trainableModifierItems"
+        )
+        db.load_simple_data(
+            file="staticdata/py_data/data_common/static/item/repackage_volume.json",
+            root_key="data.group_ids",
+            table="repackage_volume",
+            key_field="group_id",
+            key_type=int,
+            value_field="volume",
+            value_type=float,
+            logging=True
+        )
+    if "item_extra" in modes:
+        db.load_simple_data(
+            file="staticdata/py_data/data_common/static/item/repackage_volume.json",
+            root_key="data.type_ids",
+            table="repackage_volume",
+            key_field="type_id",
+            key_type=int,
+            value_field="volume",
+            value_type=float,
+            logging=True
+        )
+        db.load_reprocess(
+            file_path="staticdata/py_data/data_common/static/reprocess.json"
+        )
+    if "bps" in modes:
+        db.load_manufacturing(
+            file_path="staticdata/py_data/data_common/static/spacestation/industry.json"
         )
     if "item_attrs" in modes:
         db.load_all_item_attributes(
