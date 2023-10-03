@@ -4,10 +4,13 @@ import logging
 import os
 import re
 import sqlite3
-from collections import defaultdict
 from contextlib import closing
 from sqlite3 import Error, Connection, Cursor
 from typing import Dict, Any, Tuple, Type, Optional, List, Union, Callable
+
+from sqlalchemy import Engine, Table
+
+from echoes_data import models
 
 logger = logging.getLogger("ee.db")
 name_regexp = re.compile(r"(\{([a-zA-Z_-]+:)[^{}]+})")
@@ -75,11 +78,42 @@ def context_cursor(func: Callable):
 
 
 class EchoesDB:
-    def __init__(self) -> None:
+    def __init__(self, engine: Engine) -> None:
+        self.engine = engine
         self.strings_en = {}  # type: Dict[int, str]
         self.conn = None  # type: Connection | None
         self.strings = {}  # type: Dict[str, int]
         self.new_loc_cache = {}
+
+    def init_db(self):
+        tables = [
+            models.Region.__table__,
+            models.Constellation.__table__,
+            models.Solarsystem.__table__,
+            models.SystemConnections,
+            models.Celestial.__table__,
+            models.Unit.__table__,
+            models.LocalizedString.__table__,
+            models.Attribute.__table__,
+            models.Effect.__table__,
+            models.Group.__table__,
+            models.Categories.__table__,
+            models.Type.__table__,
+            models.Item.__table__,
+            models.ItemNanocore.__table__,
+            models.ItemAttribute.__table__,
+            models.ItemEffects.__table__,
+            models.PlanetExploit.__table__,
+            models.ModifierDefinition.__table__,
+            models.ModifierValue.__table__,
+            models.ItemModifiers.__table__,
+            models.RepackageVolume.__table__,
+            models.Reprocess.__table__,
+            models.Blueprint.__table__,
+            models.BlueprintCosts.__table__
+        ]
+        for table in tables:  # type: Table
+            table.create(bind=self.engine, checkfirst=True)
 
     def create_connection(self, db_file: str):
         """ create a database connection to a SQLite database """
@@ -107,79 +141,81 @@ class EchoesDB:
                        localized: Optional[Dict[str, str]] = None,
                        dict_root_key: Optional[str] = None):
         logger.info("Loading data from file %s into %s", file, table)
-        with open(file, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        raw_extra = None
-        if merge_with_file:
-            with open(merge_with_file, "r", encoding="utf-8") as f:
-                raw_extra = json.load(f)
-        if auto_schema:
-            # Load json schema from the corresponding *.schema.json
-            # The keys will be converted to camelCase
-            schema = load_schema(file=file.replace(".json", ".schema.json"),
-                                 schema=schema)
+        with self.engine.connect() as conn:
+            with open(file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            raw_extra = None
             if merge_with_file:
-                load_schema(file=merge_with_file.replace(".json", ".schema.json") if merge_with_file else None,
-                            schema=schema)
+                with open(merge_with_file, "r", encoding="utf-8") as f:
+                    raw_extra = json.load(f)
+            if auto_schema:
+                # Load json schema from the corresponding *.schema.json
+                # The keys will be converted to camelCase
+                schema = load_schema(file=file.replace(".json", ".schema.json"),
+                                     schema=schema)
+                if merge_with_file:
+                    load_schema(file=merge_with_file.replace(".json", ".schema.json") if merge_with_file else None,
+                                schema=schema)
 
-        if type(fields) == str:
-            fields = fields.split(",")
-        loaded = 0
-        if dict_root_key:
-            for k in dict_root_key.split("."):
-                raw = raw[k]
-        # iterate all items in file
-        for item_id, item in raw.items():
-            data = {schema["key"][0]: schema["key"][1](item_id)}
-            # Iterate all properties of the item
-            for k, v in item.items():
-                if schema[k][1] is None:
-                    # Unknown data type
-                    continue
-                # Check if property should get saved into the database
-                if fields is not None and schema[k][0] in fields:
-                    data[schema[k][0]] = (schema[k][1])(v)
-                    # Replace  with
-                    if schema[k][1] == str:
-                        data[schema[k][0]] = data[schema[k][0]].replace("'", "\"")
-            if localized:
-                # Handle localized strings
-                for field, k in localized.items():
-                    # field is the column of the database, k the property key
-                    if k in data:
-                        string = data[k]
-                    else:
-                        string = item[k]
-                    string_c = correct_string(string)
-                    if string == string_c:
-                        # It is a normal string that can be handled directly
-                        data[field] = self.get_localized_id(string, save_new=True, only_cache=True)
-                    else:
-                        # Handle strings like "{module_affix:联邦海军} {module:大型装甲连接模块}"
-                        # The placeholder will get replaced with the ids,
-                        # for example "{43690} {3507}".
-                        # The key will be set to -2 as multiple keys were used.
-                        data[field] = -2
-                        if k in data:
-                            data[k] = self.correct_localized_string(string)
-
-            # Load extra data from additional file.
-            # For example, the items have an additional item_dogma file with extra properties.
-            if raw_extra and item_id in raw_extra:
-                for k, v in raw_extra[item_id].items():
+            if type(fields) == str:
+                fields = fields.split(",")
+            loaded = 0
+            if dict_root_key:
+                for k in dict_root_key.split("."):
+                    raw = raw[k]
+            # iterate all items in file
+            for item_id, item in raw.items():
+                data = {schema["key"][0]: schema["key"][1](item_id)}
+                # Iterate all properties of the item
+                for k, v in item.items():
                     if schema[k][1] is None:
+                        # Unknown data type
                         continue
+                    # Check if property should get saved into the database
                     if fields is not None and schema[k][0] in fields:
                         data[schema[k][0]] = (schema[k][1])(v)
-            if default_values:
-                for field, v in default_values.items():
-                    if field not in data:
-                        data[field] = v
-            self._insert_data(table, data, cursor)
-            loaded += 1
-        self.conn.commit()
-        logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
-        self.save_localized_cache()
+                        # Replace  with
+                        if schema[k][1] == str:
+                            data[schema[k][0]] = data[schema[k][0]].replace("'", "\"")
+                if localized:
+                    # Handle localized strings
+                    for field, k in localized.items():
+                        # field is the column of the database, k the property key
+                        if k in data:
+                            string = data[k]
+                        else:
+                            string = item[k]
+                        string_c = correct_string(string)
+                        if string == string_c:
+                            # It is a normal string that can be handled directly
+                            data[field] = self.get_localized_id(string, save_new=True, only_cache=True)
+                        else:
+                            # Handle strings like "{module_affix:联邦海军} {module:大型装甲连接模块}"
+                            # The placeholder will get replaced with the ids,
+                            # for example "{43690} {3507}".
+                            # The key will be set to -2 as multiple keys were used.
+                            data[field] = -2
+                            if k in data:
+                                data[k] = self.correct_localized_string(string)
+
+                # Load extra data from additional file.
+                # For example, the items have an additional item_dogma file with extra properties.
+                if raw_extra and item_id in raw_extra:
+                    for k, v in raw_extra[item_id].items():
+                        if schema[k][1] is None:
+                            continue
+                        if fields is not None and schema[k][0] in fields:
+                            data[schema[k][0]] = (schema[k][1])(v)
+                if default_values:
+                    for field, v in default_values.items():
+                        if field not in data:
+                            data[field] = v
+
+                #self._insert_data(table, data, cursor)
+                loaded += 1
+            # self.conn.commit()
+            logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
+            self.save_localized_cache()
 
     def load_all_dict_data(self,
                            root_path: str,

@@ -3,6 +3,7 @@ import logging
 import re
 import sys
 
+import sqlalchemy
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
 
@@ -31,11 +32,22 @@ if __name__ == '__main__':
                         default=ALL_MODES)
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction,
                         help="Uses the legacy db format from sweet")
+    parser.add_argument("-db", "--database", type=str, default="sqlite+pysqlite:///echoes.db")
 
     args = parser.parse_args()
     just_fix_windows_console()
-    db = database.EchoesDB()
-    db.create_connection("echoes.db")
+
+    # Sqlalchemy setup
+    engine = sqlalchemy.create_engine(args.database,
+                                      echo=True,
+                                      pool_pre_ping=True,
+                                      pool_recycle=True)
+
+    db = database.EchoesDB(engine)
+    db.init_db()
+    # db.create_connection("echoes.db")
+    exit(0)
+    # noinspection PyUnreachableCode
     logger.info("Setting up tables")
     tables_setup.setup_basic_tables(db.conn, sweet_compatible=args.legacy)
     tables_setup.setup_universe_tables(db.conn)
