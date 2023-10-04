@@ -1,6 +1,9 @@
 from sqlite3 import Connection
 
+from sqlalchemy.util import deprecated
 
+
+@deprecated(version="0.0.2-alpha", message="The table creation should happen via SQLAlchemy")
 def setup_basic_tables(conn: Connection, sweet_compatible=False):
     conn.execute("create table if not exists unit("
                  "    id          INTEGER primary key,"
@@ -383,6 +386,7 @@ def setup_basic_tables(conn: Connection, sweet_compatible=False):
     conn.commit()
 
 
+@deprecated(version="0.0.2-alpha", message="The table creation should happen via SQLAlchemy")
 def setup_universe_tables(conn: Connection):
     conn.execute("create table if not exists regions ("
                  "    id         int    not null primary key,"

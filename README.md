@@ -54,11 +54,20 @@ eve-echoes-data/ (this folder name doesn't matter)
 ```
 Please launch the script with `python main.py -m <one or more modes>`, these are the available modes:
 ```python
-["lang", "items", "item_attrs", "base", "modifier", "universe", "planet_exploit"]
+["lang", "items", "item_extra", "item_attrs", "bps", "base", "modifier", "universe", "planet_exploit"]
 ```
 e.g.
 ```shell
 python main.py -m items lang base universe planet_exploit
 ```
-This will export the data into an sqlite3 database.
-You can find usefull SQL commands in [useful_sql_cmds.md](useful_sql_cmds.md).
+This will export the data into a sqlite3 database by default. You can specify another database via the `-db <url>` and
+`--dialect <sqlite|mysql>` argument. For example:
+```shell
+python main.py -db "mariadb+mariadbconnector://user:password@localhost:3306/database" --dialect mysql
+
+python main.py -db "sqlite+pysqlite:///echoes.db" --dialect sqlite
+```
+Please make sure to install the required dependencies for your database, e.g. `mariadb` if you want to use a MariaDB
+database.
+
+You can find useful SQL commands in [useful_sql_cmds.md](useful_sql_cmds.md).

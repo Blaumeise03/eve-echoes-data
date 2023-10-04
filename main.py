@@ -7,7 +7,8 @@ import sqlalchemy
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
 
-from echoes_data import database, universe, tables_setup
+from echoes_data import database, models
+from echoes_data.database import Dialect
 from echoes_data.universe import UniverseLoader
 
 logger = logging.getLogger()
@@ -26,33 +27,28 @@ logger.setLevel("INFO")
 ALL_MODES = ["lang", "items", "item_extra", "item_attrs", "bps", "base", "modifier", "universe", "planet_exploit"]
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Patch notes scrapper for the game Eve Echoes")
+    parser = argparse.ArgumentParser(description="Data extractor for the game Eve Echoes",
+                                     formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("-m", "--mode",
                         type=str, nargs="+", choices=ALL_MODES,
-                        default=ALL_MODES)
-    parser.add_argument("--legacy", action=argparse.BooleanOptionalAction,
-                        help="Uses the legacy db format from sweet")
-    parser.add_argument("-db", "--database", type=str, default="sqlite+pysqlite:///echoes.db")
+                        default=ALL_MODES, help="The data that should be extracted")
+    parser.add_argument("-db", "--database", type=str, default="sqlite+pysqlite:///echoes.db",
+                        help="The url to the database, e.g. \nmariadb+mariadbconnector://user:password@localhost:3306/database")
+    parser.add_argument("--dialect", type=str, choices=["sqlite", "mysql"], default="sqlite",
+                        help="The database dialect, only sqlite and mysql are supported")
 
     args = parser.parse_args()
     just_fix_windows_console()
 
     # Sqlalchemy setup
     engine = sqlalchemy.create_engine(args.database,
-                                      echo=True,
+                                      echo=False,
                                       pool_pre_ping=True,
                                       pool_recycle=True)
 
-    db = database.EchoesDB(engine)
+    db = database.EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
     db.init_db()
-    # db.create_connection("echoes.db")
-    exit(0)
-    # noinspection PyUnreachableCode
-    logger.info("Setting up tables")
-    tables_setup.setup_basic_tables(db.conn, sweet_compatible=args.legacy)
-    tables_setup.setup_universe_tables(db.conn)
     uni_loader = UniverseLoader(db)
-
     modes = args.mode
 
     if "lang" in modes:
@@ -65,13 +61,13 @@ if __name__ == '__main__':
     db.load_localized_cache()
     if "base" in modes:
         db.load_dict_data(
-            file="staticdata/staticdata/items/group.json", table="groups",
+            file="staticdata/staticdata/items/group.json", table=models.Group.__table__,
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
             default_values={"itemIds": "[]"},
             fields="id,itemIds,anchorable,anchored,fittableNonSingleton,iconPath,useBasePrice,localisedNameIndex,sourceName"
         )
         db.load_dict_data(
-            file="staticdata/staticdata/items/category.json", table="categories",
+            file="staticdata/staticdata/items/category.json", table=models.Categories.__table__,
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
             default_values={"groupIds": "[]"},
             fields="id,groupIds,localisedNameIndex,sourceName"
@@ -88,12 +84,15 @@ if __name__ == '__main__':
         db.load_dict_data(
             file="staticdata/staticdata/dogma/attributes.json", table="attributes",
             schema={"operator": ("attributeOperator", str), "to_attr_id": ("toAttrId", str)},
+            zero_none_fields=["unitId"],
             fields="id,attributeCategory,attributeName,available,chargeRechargeTimeId,defaultValue,highIsGood,"
                    "maxAttributeId,attributeOperator,stackable,toAttrId,unitId,unitLocalisationKey,attributeSourceUnit,"
                    "attributeTip,attributeSourceName,nameLocalisationKey,tipLocalisationKey,attributeFormula"
         )
         db.load_dict_data(
             file="staticdata/staticdata/dogma/effects.json", table="effects",
+            zero_none_fields=["dischargeAttributeId", "durationAttributeId", "falloffAttributeId",
+                              "fittingUsageChanceAttributeId", "rangeAttributeId", "trackingSpeedAttributeId"],
             fields="id,disallowAutoRepeat,dischargeAttributeId,durationAttributeId,effectCategory,effectName,"
                    "electronicChance,falloffAttributeId,fittingUsageChanceAttributeId,guid,isAssistance,isOffensive,"
                    "isWarpSafe,rangeAttributeId,rangeChance,trackingSpeedAttributeId"
@@ -101,7 +100,7 @@ if __name__ == '__main__':
     if "items" in modes:
         # ToDo: find preSkill, maybe exp? not sure about this one
         db.load_all_dict_data(
-            root_path="staticdata/staticdata/items", table="items",
+            root_path="staticdata/staticdata/items", table=models.Item, skip_existing=True, primary_key="id",
             merge_with_file_path="staticdata/staticdata/items/item_dogma",
             schema={
                 "zh_desc": ("sourceDesc", str),
@@ -145,6 +144,7 @@ if __name__ == '__main__':
             value_type=float,
             logging=True
         )
+
     if "item_extra" in modes:
         db.load_simple_data(
             file="staticdata/py_data/data_common/static/item/repackage_volume.json",
@@ -227,11 +227,11 @@ if __name__ == '__main__':
             file_path="staticdata/sigmadata/eve/universe/constellations.json",
             table="constellations",
             columns=["id", "name", "x", "y", "z", "faction_id", "radius", "wormhole_class_id"])
-        uni_loader.load_data(
+        systems = uni_loader.load_data(
             file_path="staticdata/sigmadata/eve/universe/solar_systems.json",
             table="solarsystems",
             columns=["id", "name", "x", "y", "z", "security", "faction_id", "radius", "region_id", "constellation_id"],
-            extra_task=universe.add_solarsystem_neighbours)
+            return_raw=True, loading_bar=True)
         uni_loader.load_group_id_cache()
         uni_loader.load_system_cache()
         uni_loader.load_data(
@@ -257,5 +257,3 @@ if __name__ == '__main__':
             cache_celestials=True, loading_bar=True)
     if "planet_exploit" in modes:
         uni_loader.load_planetary_production("staticdata/manual_staticdata/universe/planet_exploit_resource.json")
-
-    db.conn.close()

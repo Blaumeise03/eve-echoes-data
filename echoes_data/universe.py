@@ -2,10 +2,11 @@ import importlib.util
 import json
 import logging
 from collections import defaultdict
-from sqlite3 import Cursor
 from typing import Dict, List, Any, Optional, Callable, DefaultDict, Union
 
-from echoes_data import utils
+from sqlalchemy import select, update
+
+from echoes_data import utils, models
 from echoes_data.database import EchoesDB
 
 logger = logging.getLogger("ee.universe")
@@ -24,14 +25,6 @@ NUMBER_TO_ROMA = [
     "XXIX", "XXX"]
 
 
-def add_solarsystem_neighbours(cursor: Cursor, system_id: int, system: Dict[str, Any]):
-    sql = "INSERT OR REPLACE INTO system_connections (origin_id, destination_id) VALUES (?, ?)"
-    for n_id in system["neighbours"]:
-        cursor.execute(sql, (system_id, n_id))
-    sql = "UPDATE constellations SET region_id=? WHERE id=?"
-    cursor.execute(sql, (system["region_id"], system["constellation_id"]))
-
-
 class UniverseLoader:
     def __init__(self, db: EchoesDB):
         self.db = db  # type: EchoesDB
@@ -43,11 +36,6 @@ class UniverseLoader:
         self.type_to_short_id = {}  # type: Dict[int, int]
         self.solar_systems = {}  # type: Dict[int, str]
         self.celestial_cache = {}  # type: Dict[int, Dict[str, Any]]
-
-    def cursor(self):
-        if self._cursor is None:
-            self._cursor = self.db.conn.cursor()
-        return self._cursor
 
     def load_texts(self, file_path: str):
         logger.info("Loading localized strings")
@@ -64,36 +52,39 @@ class UniverseLoader:
 
     def load_group_id_cache(self):
         logger.info("Loading group id cache")
-        sql = "SELECT id, name, localisedNameIndex, sourceName FROM groups"
-        cursor = self.cursor()
-        cursor.execute(sql)
-        res = cursor.fetchall()
-        for i, n, l_i, l_n in res:
-            self.group_ids[i] = {
-                "name": n,
-                "loc_id": l_i,
-                "zh_name": l_n
-            }
-            self.named_group_ids[n] = i
-        sql = "SELECT id, group_id FROM types"
-        cursor.execute(sql)
-        res = cursor.fetchall()
-        for t, g in res:
-            self.type_to_group_id[t] = g
-        sql = "SELECT id, short_id FROM types WHERE short_id IS NOT NULL"
-        cursor.execute(sql)
-        res = cursor.fetchall()
-        for i, s in res:
-            self.type_to_short_id[i] = s
+        with self.db.engine.connect() as conn:
+            stmt = select(
+                models.Group.id,
+                models.Group.name,
+                models.Group.localisedNameIndex,
+                models.Group.sourceName
+            )
+            res = conn.execute(stmt).fetchall()
+            for i, n, l_i, l_n in res:
+                self.group_ids[i] = {
+                    "name": n,
+                    "loc_id": l_i,
+                    "zh_name": l_n
+                }
+                self.named_group_ids[n] = i
+            stmt = select(
+                models.Type.id, models.Type.group_id
+            )
+            res = conn.execute(stmt).fetchall()
+            for t, g in res:
+                self.type_to_group_id[t] = g
+            stmt = select(models.Type.id, models.Type.short_id).where(models.Type.short_id.is_not(None))
+            res = conn.execute(stmt).fetchall()
+            for i, s in res:
+                self.type_to_short_id[i] = s
 
     def load_system_cache(self):
         logger.info("Loading solar system cache")
-        sql = "SELECT id, name FROM solarsystems"
-        cursor = self.cursor()
-        cursor.execute(sql)
-        res = cursor.fetchall()
-        for i, n in res:
-            self.solar_systems[i] = n
+        stmt = select(models.Solarsystem.id, models.Solarsystem.name)
+        with self.db.engine.connect() as conn:
+            res = conn.execute(stmt).fetchall()
+            for i, n in res:
+                self.solar_systems[i] = n
 
     def _save_get_group_name(self, group_id):
         # Reverse engineered from script/data_common/evetypes/__init__.py
@@ -164,19 +155,19 @@ class UniverseLoader:
 
         logger.info("Loaded %s category ids, %s group ids and %s type ids",
                     len(category_ids), len(group_ids), len(type_ids))
-        sql = "INSERT INTO %s ( id, name ) VALUES ( ?, ? ) ON CONFLICT DO UPDATE SET name=?"
-        for i, n in category_ids.items():
-            self.cursor().execute(sql % "categories", (i, n, n))
-        for i, n in group_ids.items():
-            self.cursor().execute(sql % "groups", (i, n, n))
-        sql = ("INSERT INTO types ( id, name, group_id, short_id ) "
-               "    VALUES ( ?, ?, ?, ? ) ON CONFLICT DO UPDATE "
-               "    SET name=?, group_id=?, short_id=?")
-        for i, n in type_ids.items():
-            g = str(type_groups[i])
-            s = str(type_shorts[i])
-            self.cursor().execute(sql, (i, n, g, s, n, g, s))
-        self.db.conn.commit()
+
+        with self.db.engine.connect() as conn:
+            stmt = self.db.dialect.upsert("categories", ["id", "name"])
+            conn.execute(stmt, list(map(lambda t: {"id": t[0], "name": t[1]}, category_ids.items())))
+            stmt = self.db.dialect.upsert("groups", ["id", "name"])
+            conn.execute(stmt, list(map(lambda t: {"id": t[0], "name": t[1]}, group_ids.items())))
+            stmt = self.db.dialect.upsert("types", ["id", "name", "group_id", "short_id"])
+            for i, n in type_ids.items():
+                # Batch doesn't work for this one
+                conn.execute(stmt, {
+                    "id": i, "group_id": type_groups[i], "short_id": type_shorts[i], "name": n
+                })
+            conn.commit()
         logger.info("Inserted %s category ids, %s group ids and %s type ids",
                     len(category_ids), len(group_ids), len(type_ids))
 
@@ -184,11 +175,11 @@ class UniverseLoader:
                   file_path: str,
                   table: str,
                   columns: List[str],
-                  extra_task: Optional[Callable[[Cursor, int, Dict[str, Any]], None]] = None,
                   direct_name=False,
                   loading_bar=False,
                   name_func: Optional[Callable[[int], None]] = None,
-                  cache_celestials=False):
+                  cache_celestials=False,
+                  return_raw=False):
 
         logger.info("Loading data from %s into %s", file_path, table)
         with open(file_path, "r", encoding="utf-8") as file:
@@ -206,85 +197,113 @@ class UniverseLoader:
                 i += 1
         if loading_bar:
             logger.info("Inserting %s entries into %s", num, table)
-        col_names = ", ".join(map(lambda s: s if type(s) == str else s[0], columns))
-        sql = f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({','.join(['?'] * len(columns))})"
-        not_found = []
-        i = 0
-        for i_id, item in raw.items():
-            i_id = int(i_id)
-            if name_func is not None:
-                i_name = name_func(i_id)
-            elif not direct_name:
-                i_name = self.texts[i_id]
-            else:
-                i_name = item["name"]
-            data = []
-            if i_name is None:
-                continue
-            for col in columns:
-                key = col
-                if type(col) == tuple:
-                    key = col[1]
-                    col = col[0]
-                if callable(key):
-                    # noinspection PyCallingNonCallable
-                    data.append(key(item))
-                elif key == "id":
-                    data.append(i_id)
-                elif key == "name":
-                    data.append(i_name)
-                elif key in "xyz":
-                    if "position" in item:
-                        # Celestials
-                        data.append(item["position"][key])
-                    elif "center" in item:
-                        # Regions, Constellations and Systems
-                        data.append(item["center"][key])
-                    else:
-                        # Stars
-                        data.append(0)
-                elif key in item:
-                    data.append(item[key])
+        stmt = self.db.dialect.upsert(table, list(map(lambda a: a if type(a) != tuple else a[0], columns)))
+        overflow_items = []
+        with self.db.engine.connect() as conn:
+            not_found = []
+            i = 0
+            for i_id, item in raw.items():
+                i_id = int(i_id)
+                if name_func is not None:
+                    i_name = name_func(i_id)
+                elif not direct_name:
+                    i_name = self.texts[i_id]
                 else:
-                    data.append(None)
-                    if key not in not_found:
-                        not_found.append(key)
-            self.cursor().execute(sql, data)
-            if extra_task is not None:
-                extra_task(self.cursor(), i_id, item)
-            if loading_bar and i % 1000 == 0:
-                utils.print_loading_bar(i / num)
-            i += 1
-        self.db.conn.commit()
+                    i_name = item["name"]
+                data = {}
+                if i_name is None:
+                    pass  # continue
+                for col in columns:
+                    key = col
+                    if type(col) == tuple:
+                        key = col[1]
+                        col = col[0]
+                    if callable(key):
+                        # noinspection PyCallingNonCallable
+                        data[col] = key(item)
+                    elif key == "id":
+                        data[col] = i_id
+                    elif key == "name":
+                        data[col] = i_name
+                    elif key in "xyz":
+                        if "position" in item:
+                            # Celestials
+                            data[col] = (item["position"][key])
+                        elif "center" in item:
+                            # Regions, Constellations and Systems
+                            data[col] = (item["center"][key])
+                        else:
+                            # Stars
+                            data[col] = 0
+                    elif key in item:
+                        data[col] = (item[key])
+                    else:
+                        data[col] = None
+                        if key not in not_found:
+                            not_found.append(key)
+                for k, val in data.items():
+                    if not type(val) == int and not type(val) == float:
+                        continue
+                    val = int(val)
+                    if val.bit_length() > 63:
+                        overflow_items.append(i_id)
+                        data[k] = None
+                conn.execute(stmt, data)
+                if loading_bar and i % 1000 == 0:
+                    utils.print_loading_bar(i / num)
+                i += 1
+            conn.commit()
         if len(not_found) > 0:
             logger.warning("Did not find these keys in file %s: %s", file_path, not_found)
+        if len(overflow_items) > 0:
+            logger.warning("%s data entries were exceeding the 64bit limit, the values were replaced with NULL for %s",
+                           len(overflow_items), table)
         logger.info("Inserted %s entries into %s", len(raw), table)
+        if return_raw:
+            return raw
+
+    def init_system_neighbours(self, systems: Dict[str, Any]):
+        with self.db.engine.connect() as conn:
+            stmt = self.db.dialect.replace("system_connections", ["originId", "destinationId"])
+            for sys_id, system in systems.items():
+                sys_id = int(sys_id)
+                for n_id in system["neighbours"]:
+                    conn.execute(stmt, {"originId": sys_id, "destinationId": n_id})
+                stmt = update(models.Constellation).values(region_id=system["region_id"]).where(
+                    id=system["constellation_id"])
+                conn.execute(stmt)
+            conn.commit()
 
     def load_planetary_production(self, file_path: str):
         logger.info("Loading planetary production data from %s", file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
-        curser = self.cursor()
         num = len(raw)
         logger.info("Loaded %s planets, inserting into database", num)
         utils.print_loading_bar(0)
         i = 0
         j = 0
-        sql = ("INSERT OR REPLACE INTO planet_exploit "
-               "    (planet_id, type_id, output, richness, richness_value, location_index) "
-               "    VALUES ( ?, ?, ?, ?, ?, ?)")
+        stmt = self.db.dialect.replace(
+            "planet_exploit",
+            ["planet_id", "type_id", "output", "richness", "richness_value", "location_index"])
         RICHNESS = ['poor', 'medium', 'rich', 'perfect']
-        for planet in raw.values():  # type: Dict[str, Any]
-            p_id = planet["planet_id"]
-            for res in planet["resource_info"].values():  # type: Dict[str, Union[int, float]]
-                rich_i = res["richness_index"]
-                curser.execute(
-                    sql,
-                    (p_id, res["resource_type_id"], res["init_output"], RICHNESS[rich_i - 1],
-                     res["richness_value"], res["location_index"]))
-                j += 1
-            if i % 1000 == 0:
-                utils.print_loading_bar(i / num)
-            i += 1
-        self.db.conn.commit()
+        with self.db.engine.connect() as conn:
+            for planet in raw.values():  # type: Dict[str, Any]
+                p_id = planet["planet_id"]
+                for res in planet["resource_info"].values():  # type: Dict[str, Union[int, float]]
+                    rich_i = res["richness_index"]
+                    conn.execute(
+                        stmt,
+                        {
+                            "planet_id": p_id,
+                            "type_id": res["resource_type_id"],
+                            "output": res["init_output"],
+                            "richness": RICHNESS[rich_i - 1],
+                            "richness_value": res["richness_value"],
+                            "location_index": res["location_index"]
+                        })
+                    j += 1
+                if i % 100 == 0:
+                    utils.print_loading_bar(i / num)
+                i += 1
         logger.info("Inserted %s resources from %s planets into the database", j, num)

@@ -1,7 +1,7 @@
 import enum
 from typing import List, Optional
 
-from sqlalchemy import String, ForeignKey, Float, Enum, BigInteger, Integer, Table, Column, Boolean
+from sqlalchemy import String, ForeignKey, Float, Enum, BigInteger, Integer, Table, Column, Boolean, Text, text
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 class Region(Base):
     __tablename__ = "regions"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(30), nullable=True)
     x: Mapped[int] = mapped_column(BigInteger, nullable=True)
     y: Mapped[int] = mapped_column(BigInteger, nullable=True)
     z: Mapped[int] = mapped_column(BigInteger, nullable=True)
@@ -31,7 +31,7 @@ class Constellation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     region_id = mapped_column(ForeignKey("regions.id", name="key_const_reg", ondelete="CASCADE"))
     region: Mapped[Region] = relationship(back_populates="constellations")
-    name: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(30), nullable=True)
     x: Mapped[int] = mapped_column(BigInteger, nullable=True)
     y: Mapped[int] = mapped_column(BigInteger, nullable=True)
     z: Mapped[int] = mapped_column(BigInteger, nullable=True)
@@ -58,7 +58,7 @@ class Solarsystem(Base):
     region_id = mapped_column(ForeignKey("regions.id", name="key_sys_reg"))
     constellation_id = mapped_column(ForeignKey("constellations.id", name="key_sys_const", ondelete="CASCADE"))
     constellation: Mapped[Constellation] = relationship(back_populates="systems")
-    name: Mapped[str] = mapped_column(String(30), index=True)
+    name: Mapped[str] = mapped_column(String(30), index=True, nullable=True)
     x: Mapped[int] = mapped_column(BigInteger, nullable=True)
     y: Mapped[int] = mapped_column(BigInteger, nullable=True)
     z: Mapped[int] = mapped_column(BigInteger, nullable=True)
@@ -157,8 +157,8 @@ class Celestial(Base):
             return None
 
     __tablename__ = "celestials"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(30))
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
     type_id: Mapped[int] = mapped_column(Integer, nullable=True)
     group_id: Mapped[int] = mapped_column(Integer, nullable=True)
     system_id = mapped_column(ForeignKey("solarsystems.id", name="key_celest_sys", ondelete="CASCADE"))
@@ -193,25 +193,25 @@ class Celestial(Base):
 class Unit(Base):
     __tablename__ = "unit"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    description: Mapped[str] = mapped_column(String(64))
-    display_name: Mapped[str] = mapped_column(String(64))
-    unit_name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(Text(), nullable=True)
+    displayName: Mapped[str] = mapped_column(String(64), nullable=True)
+    unitName: Mapped[str] = mapped_column(String(64))
 
 
 class LocalizedString(Base):
     __tablename__ = "localised_strings"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source: Mapped[str] = mapped_column(String(256))
-    en: Mapped[str] = mapped_column(String(256))
-    de: Mapped[str] = mapped_column(String(256))
-    fr: Mapped[str] = mapped_column(String(256))
-    ja: Mapped[str] = mapped_column(String(256))
-    kr: Mapped[str] = mapped_column(String(256))
-    por: Mapped[str] = mapped_column(String(256))
-    ru: Mapped[str] = mapped_column(String(256))
-    spa: Mapped[str] = mapped_column(String(256))
-    zh: Mapped[str] = mapped_column(String(256))
-    zhcn: Mapped[str] = mapped_column(String(256))
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source: Mapped[str] = mapped_column(Text(), nullable=True)
+    en: Mapped[str] = mapped_column(Text(), nullable=True)
+    de: Mapped[str] = mapped_column(Text(), nullable=True)
+    fr: Mapped[str] = mapped_column(Text(), nullable=True)
+    ja: Mapped[str] = mapped_column(Text(), nullable=True)
+    kr: Mapped[str] = mapped_column(Text(), nullable=True)
+    por: Mapped[str] = mapped_column(Text(), nullable=True)
+    ru: Mapped[str] = mapped_column(Text(), nullable=True)
+    spa: Mapped[str] = mapped_column(Text(), nullable=True)
+    zh: Mapped[str] = mapped_column(Text(), nullable=True)
+    zhcn: Mapped[str] = mapped_column(Text(), nullable=True)
 
 
 class Attribute(Base):
@@ -224,35 +224,35 @@ class Attribute(Base):
     defaultValue: Mapped[float] = mapped_column(Float)
     highIsGood: Mapped[bool] = mapped_column(Boolean)
     maxAttributeId: Mapped[int] = mapped_column(Integer)
-    attributeOperator: Mapped[str] = mapped_column(String(16))
+    attributeOperator: Mapped[str] = mapped_column(Text())
     stackable: Mapped[bool] = mapped_column(Boolean)
-    toAttrId: Mapped[str] = mapped_column(String(64))
+    toAttrId: Mapped[str] = mapped_column(Text())
     unitId = mapped_column(ForeignKey("unit.id", name="key_attributes_unit"))
     unit: Mapped[Unit] = relationship()
     # Those are not yet implemented and are only placeholders for now
     unitLocalisationKey: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="localised_strings_local_unit"), nullable=True)
-    attributeSourceUnit: Mapped[str] = mapped_column(String(64), default="")
-    attributeTip: Mapped[str] = mapped_column(String(128), default="")
-    attributeSourceName: Mapped[str] = mapped_column(String(64), default="")
+        ForeignKey("localised_strings.id", name="localised_strings_local_unit"), nullable=True)
+    attributeSourceUnit: Mapped[str] = mapped_column(String(64), server_default="")
+    attributeTip: Mapped[str] = mapped_column(String(128), server_default="")
+    attributeSourceName: Mapped[str] = mapped_column(String(64), server_default="")
     nameLocalisationKey: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="localised_strings_local_name"), nullable=True)
+        ForeignKey("localised_strings.id", name="localised_strings_local_name"), nullable=True)
     tipLocalisationKey: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="localised_strings_local_tip"), nullable=True)
-    attributeFormula: Mapped[str] = mapped_column(String(64), default="A")
+        ForeignKey("localised_strings.id", name="localised_strings_local_tip"), nullable=True)
+    attributeFormula: Mapped[str] = mapped_column(String(64), server_default="A")
 
 
 class Effect(Base):
     __tablename__ = "effects"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     effectName: Mapped[str] = mapped_column(String(64))
-    effectCategory: Mapped[int] = mapped_column(Integer, default=0)
-    disallowAutoRepeat: Mapped[bool] = mapped_column(Boolean, default=False)
+    effectCategory: Mapped[int] = mapped_column(Integer, server_default="0")
+    disallowAutoRepeat: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
     guid: Mapped[str] = mapped_column(String(64))
-    isAssistance: Mapped[bool] = mapped_column(Boolean, default=False)
-    isOffensive: Mapped[bool] = mapped_column(Boolean, default=False)
-    isWarpSafe: Mapped[bool] = mapped_column(Boolean, default=False)
-    electronicChance: Mapped[int] = mapped_column(Integer, default=0)
+    isAssistance: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
+    isOffensive: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
+    isWarpSafe: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
+    electronicChance: Mapped[int] = mapped_column(Integer, server_default="0")
     falloffAttributeId: Mapped[int] = mapped_column(
         Integer, ForeignKey("attributes.id", name="key_effect_attr_falloff"), nullable=True)
     fittingUsageChanceAttributeId: Mapped[int] = mapped_column(
@@ -263,9 +263,9 @@ class Effect(Base):
         Integer, ForeignKey("attributes.id", name="key_effect_attr_duration"), nullable=True)
     rangeAttributeId: Mapped[int] = mapped_column(Integer, nullable=True)
     rangeChance: Mapped[int] = mapped_column(
-        Integer, ForeignKey("attributes.id", name="key_effect_attr_range"), nullable=True)
+        ForeignKey("attributes.id", name="key_effect_attr_range"), nullable=True)
     trackingSpeedAttributeId: Mapped[int] = mapped_column(
-        Integer, ForeignKey("attributes.id", name="key_effect_attr_tracking"), nullable=True)
+        ForeignKey("attributes.id", name="key_effect_attr_tracking"), nullable=True)
 
 
 class Group(Base):
@@ -275,12 +275,12 @@ class Group(Base):
     anchorable: Mapped[bool] = mapped_column(Boolean, nullable=True)
     anchored: Mapped[bool] = mapped_column(Boolean, nullable=True)
     fittableNonSingleton: Mapped[bool] = mapped_column(Boolean, nullable=True)
-    iconPath: Mapped[str] = mapped_column(String(128))
+    iconPath: Mapped[str] = mapped_column(String(128), nullable=True)
     useBasePrice: Mapped[bool] = mapped_column(Boolean, nullable=True)
     localisedNameIndex: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="key_groups_loc"), nullable=True)
-    sourceName: Mapped[str] = mapped_column(String(64))
-    itemIds: Mapped[str] = mapped_column(String(64))
+        ForeignKey("localised_strings.id", name="key_groups_loc"), nullable=True)
+    sourceName: Mapped[str] = mapped_column(String(64), nullable=True)
+    itemIds: Mapped[str] = mapped_column(String(64), nullable=True)
 
 
 class Categories(Base):
@@ -289,48 +289,48 @@ class Categories(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=True)
     groupIds: Mapped[str] = mapped_column(String(64), nullable=True)
     localisedNameIndex: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="key_categories_loc"), nullable=True)
-    sourceName: Mapped[str] = mapped_column(String(64))
+        ForeignKey("localised_strings.id", name="key_categories_loc"), nullable=True)
+    sourceName: Mapped[str] = mapped_column(String(64), nullable=True)
 
 
 class Type(Base):
     __tablename__ = "types"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    short_id: Mapped[int] = mapped_column(Integer, unique=True)
-    name: Mapped[str] = mapped_column(String(32))
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    short_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=True)
+    name: Mapped[str] = mapped_column(String(64))
     group_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("groups.id", name="key_types_groups"), nullable=True)#
+        ForeignKey("groups.id", name="key_types_groups"), nullable=True)
     group: Mapped[Group] = relationship()
 
 
 class Item(Base):
     __tablename__ = "items"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(64))
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=True)
     canBeJettisoned: Mapped[bool] = mapped_column(Boolean)
     descSpecial: Mapped[str] = mapped_column(String(64))
-    mainCalCode: Mapped[str] = mapped_column(String(64), default="")
-    onlineCalCode: Mapped[str] = mapped_column(String(64), default="")
-    activeCalCode: Mapped[str] = mapped_column(String(64), default="")
-    sourceDesc: Mapped[str] = mapped_column(String(128), default="")
-    sourceName: Mapped[str] = mapped_column(String(64), default="")
+    mainCalCode: Mapped[str] = mapped_column(String(128), server_default="")
+    onlineCalCode: Mapped[str] = mapped_column(String(128), server_default="")
+    activeCalCode: Mapped[str] = mapped_column(String(128), server_default="")
+    sourceDesc: Mapped[str] = mapped_column(Text(), server_default="")
+    sourceName: Mapped[str] = mapped_column(String(64), server_default="")
     nameKey: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="key_items_loc_name"), nullable=True)
+        ForeignKey("localised_strings.id", name="key_items_loc_name"), nullable=True)
     descKey: Mapped[int] = mapped_column(
-        Integer, ForeignKey("localised_strings.id", name="key_items_loc_desc"), nullable=True)
-    marketGroupId: Mapped[int] = mapped_column(Integer)
+        ForeignKey("localised_strings.id", name="key_items_loc_desc"), nullable=True)
+    marketGroupId: Mapped[int] = mapped_column(Integer, nullable=True)
     lockSkin: Mapped[str] = mapped_column(String(64), nullable=True)
-    npcCalCodes: Mapped[str] = mapped_column(String(64), nullable=True)
+    npcCalCodes: Mapped[str] = mapped_column(Text(), nullable=True)
     corpCamera: Mapped[str] = mapped_column(String(64))
     abilityList: Mapped[str] = mapped_column(String(64))
     normalDebris: Mapped[str] = mapped_column(String(64))
-    shipBonusCodeList: Mapped[str] = mapped_column(String(128))
-    shipBonusSkillList: Mapped[str] = mapped_column(String(128))
+    shipBonusCodeList: Mapped[str] = mapped_column(Text())
+    shipBonusSkillList: Mapped[str] = mapped_column(Text())
     # These are still not implemented properly
-    product: Mapped[str] = mapped_column(String(32))
-    exp: Mapped[str] = mapped_column(String(32))
-    published: Mapped[str] = mapped_column(String(32))
-    preSkill: Mapped[str] = mapped_column(String(32))
+    product: Mapped[str] = mapped_column(BigInteger(), nullable=True)
+    exp: Mapped[str] = mapped_column(Float(), server_default="0")
+    published: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
+    preSkill: Mapped[str] = mapped_column(String(32), nullable=True)
 
     def __repr__(self) -> str:
         return f"Item(id={self.id!r}, name={self.name!r})"
@@ -342,9 +342,9 @@ class ItemNanocore(Base):
         ForeignKey("items.id", name="key_itemnanocore_item"), primary_key=True)
     filmGroup: Mapped[str] = mapped_column(String(64))
     filmQuality: Mapped[int] = mapped_column(Integer)
-    availableShips: Mapped[str] = mapped_column(String(128))
-    selectableModifierItems: Mapped[str] = mapped_column(String(128))
-    trainableModifierItems: Mapped[str] = mapped_column(String(128))
+    availableShips: Mapped[str] = mapped_column(Text())
+    selectableModifierItems: Mapped[str] = mapped_column(Text())
+    trainableModifierItems: Mapped[str] = mapped_column(Text())
 
 
 class ItemAttribute(Base):
@@ -352,7 +352,7 @@ class ItemAttribute(Base):
     itemId: Mapped[int] = mapped_column(
         ForeignKey("items.id", name="key_itemattr_item"), primary_key=True)
     attributeId: Mapped[int] = mapped_column(
-        ForeignKey("items.id", name="key_itemattr_attr"), primary_key=True)
+        ForeignKey("attributes.id", name="key_itemattr_attr"), primary_key=True)
     value: Mapped[float] = mapped_column(Float)
 
 
@@ -362,23 +362,23 @@ class ItemEffects(Base):
         ForeignKey("items.id", name="key_itemeff_item"), primary_key=True)
     effectId: Mapped[int] = mapped_column(
         ForeignKey("effects.id", name="key_itemeff_eff"), primary_key=True)
-    isDefault: Mapped[bool] = mapped_column(Boolean, default=False)
+    isDefault: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
 
 
 class ModifierDefinition(Base):
     __tablename__ = "modifier_definition"
     code: Mapped[str] = mapped_column(String(64), primary_key=True)
-    changeTypes: Mapped[str] = mapped_column(String(64))
-    attributeOnly: Mapped[bool] = mapped_column(Boolean, default=False)
-    changeRanges: Mapped[str] = mapped_column(String(66))
-    changeRangeModuleNames: Mapped[str] = mapped_column(String(128))
-    attributeIds: Mapped[str] = mapped_column(String(64))
+    changeTypes: Mapped[str] = mapped_column(Text())
+    attributeOnly: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
+    changeRanges: Mapped[str] = mapped_column(Text())
+    changeRangeModuleNames: Mapped[str] = mapped_column(Text())
+    attributeIds: Mapped[str] = mapped_column(Text())
 
 
 class ModifierValue(Base):
     __tablename__ = "modifier_value"
     code: Mapped[str] = mapped_column(String(64), primary_key=True)
-    attributes: Mapped[str] = mapped_column(String(64))
+    attributes: Mapped[str] = mapped_column(Text())
     typeName: Mapped[str] = mapped_column(
         ForeignKey("modifier_definition.code", name="key_modifiervalue_modifierdef"), primary_key=True)
 
@@ -391,7 +391,7 @@ class ItemModifiers(Base):
     typeCode: Mapped[str] = mapped_column(String(64))
     changeType: Mapped[str] = mapped_column(String(64))
     attributeOnly: Mapped[bool] = mapped_column(Boolean)
-    changeRange: Mapped[str] = mapped_column(String(64))
+    changeRange: Mapped[str] = mapped_column(String(128))
     changeRangeModuleNameId: Mapped[int] = mapped_column(Integer)
     attributeId: Mapped[int] = mapped_column(Integer)
     attributeValue: Mapped[float] = mapped_column(Float)
@@ -404,7 +404,7 @@ class RepackageVolume(Base):
     group_id: Mapped[int] = mapped_column(
         ForeignKey("groups.id", name="key_repack_group"), unique=True, nullable=True)
     type_id: Mapped[int] = mapped_column(
-        ForeignKey("types.id", name="key_repack_type"), unique=True, nullable=True)
+        ForeignKey("items.id", name="key_repack_item"), unique=True, nullable=True)
     volume: Mapped[float] = mapped_column(Float)
 
 
@@ -414,7 +414,7 @@ class Reprocess(Base):
         ForeignKey("items.id", name="key_reprocess_item_base"), primary_key=True)
     resultId: Mapped[int] = mapped_column(
         ForeignKey("items.id", name="key_reprocess_item_result"), primary_key=True)
-    volume: Mapped[int] = mapped_column(Integer)
+    quantity: Mapped[int] = mapped_column(Integer)
 
 
 class Blueprint(Base):
@@ -428,7 +428,7 @@ class Blueprint(Base):
     materialAmendAtt: Mapped[int] = mapped_column(
         ForeignKey("attributes.id", name="key_blueprint_attributes_mats"), primary_key=True)
     decryptorMul: Mapped[int] = mapped_column(Integer)
-    money: Mapped[int] = mapped_column(Integer)
+    money: Mapped[int] = mapped_column(BigInteger)
     time: Mapped[int] = mapped_column(Integer)
     timeAmendAtt: Mapped[int] = mapped_column(
         ForeignKey("attributes.id", name="key_blueprint_attributes_time"), primary_key=True)
@@ -452,7 +452,7 @@ class CostType(enum.Enum):
 
 
 class BlueprintCosts(Base):
-    __tablename__ = "blueprint_cost"
+    __tablename__ = "blueprint_costs"
     blueprintId: Mapped[int] = mapped_column(
         ForeignKey("blueprints.blueprintId", name="key_blueprintcost_bp"), primary_key=True)
     resourceId: Mapped[int] = mapped_column(
@@ -487,6 +487,7 @@ class PlanetExploit(Base):
     output: Mapped[float] = mapped_column(Float())
     richness: Mapped[int] = mapped_column(Enum(Richness))
     richness_value: Mapped[int] = mapped_column(Integer)
+    location_index: Mapped[int] = mapped_column(Integer)
 
     def __repr__(self) -> str:
         return f"PlanetExploit(planet={self.planet_id}, res={self.type_id})"
