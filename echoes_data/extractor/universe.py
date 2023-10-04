@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Callable, DefaultDict, Union
 from sqlalchemy import select, update
 
 from echoes_data import utils, models
-from echoes_data.database import EchoesDB
+from echoes_data.extractor.basics import BasicLoader
 
 logger = logging.getLogger("ee.universe")
 NUMBER_TO_ROMA = [
@@ -26,8 +26,8 @@ NUMBER_TO_ROMA = [
 
 
 class UniverseLoader:
-    def __init__(self, db: EchoesDB):
-        self.db = db  # type: EchoesDB
+    def __init__(self, db: BasicLoader):
+        self.loader = db  # type: BasicLoader
         self.texts = {}  # type: Dict[int, str]
         self._cursor = None
         self.group_ids = {}  # type: Dict[int, Dict[str, Any]]
@@ -46,13 +46,13 @@ class UniverseLoader:
         i = 0
         for k, v in raw.items():
             if "name" in v:
-                self.texts[int(k)] = self.db.get_localized_string(v["name"])
+                self.texts[int(k)] = self.loader.get_localized_string(v["name"])
             i += 1
         logger.info("Loaded %s strings", i)
 
     def load_group_id_cache(self):
         logger.info("Loading group id cache")
-        with self.db.engine.connect() as conn:
+        with self.loader.engine.connect() as conn:
             stmt = select(
                 models.Group.id,
                 models.Group.name,
@@ -81,7 +81,7 @@ class UniverseLoader:
     def load_system_cache(self):
         logger.info("Loading solar system cache")
         stmt = select(models.Solarsystem.id, models.Solarsystem.name)
-        with self.db.engine.connect() as conn:
+        with self.loader.engine.connect() as conn:
             res = conn.execute(stmt).fetchall()
             for i, n in res:
                 self.solar_systems[i] = n
@@ -92,7 +92,7 @@ class UniverseLoader:
         name = None
         if group_id in self.group_ids:
             zh_name = self.group_ids[group_id]["zh_name"]
-            name = self.db.get_localized_string(zh_name, return_def=False)
+            name = self.loader.get_localized_string(zh_name, return_def=False)
         if name is None:
             return str(group_id)
 
@@ -156,12 +156,12 @@ class UniverseLoader:
         logger.info("Loaded %s category ids, %s group ids and %s type ids",
                     len(category_ids), len(group_ids), len(type_ids))
 
-        with self.db.engine.connect() as conn:
-            stmt = self.db.dialect.upsert("categories", ["id", "name"])
+        with self.loader.engine.connect() as conn:
+            stmt = self.loader.dialect.upsert("categories", ["id", "name"])
             conn.execute(stmt, list(map(lambda t: {"id": t[0], "name": t[1]}, category_ids.items())))
-            stmt = self.db.dialect.upsert("groups", ["id", "name"])
+            stmt = self.loader.dialect.upsert("groups", ["id", "name"])
             conn.execute(stmt, list(map(lambda t: {"id": t[0], "name": t[1]}, group_ids.items())))
-            stmt = self.db.dialect.upsert("types", ["id", "name", "group_id", "short_id"])
+            stmt = self.loader.dialect.upsert("types", ["id", "name", "group_id", "short_id"])
             for i, n in type_ids.items():
                 # Batch doesn't work for this one
                 conn.execute(stmt, {
@@ -197,9 +197,9 @@ class UniverseLoader:
                 i += 1
         if loading_bar:
             logger.info("Inserting %s entries into %s", num, table)
-        stmt = self.db.dialect.upsert(table, list(map(lambda a: a if type(a) != tuple else a[0], columns)))
+        stmt = self.loader.dialect.upsert(table, list(map(lambda a: a if type(a) != tuple else a[0], columns)))
         overflow_items = []
-        with self.db.engine.connect() as conn:
+        with self.loader.engine.connect() as conn:
             not_found = []
             i = 0
             for i_id, item in raw.items():
@@ -263,8 +263,8 @@ class UniverseLoader:
             return raw
 
     def init_system_neighbours(self, systems: Dict[str, Any]):
-        with self.db.engine.connect() as conn:
-            stmt = self.db.dialect.replace("system_connections", ["originId", "destinationId"])
+        with self.loader.engine.connect() as conn:
+            stmt = self.loader.dialect.replace("system_connections", ["originId", "destinationId"])
             for sys_id, system in systems.items():
                 sys_id = int(sys_id)
                 for n_id in system["neighbours"]:
@@ -283,11 +283,11 @@ class UniverseLoader:
         utils.print_loading_bar(0)
         i = 0
         j = 0
-        stmt = self.db.dialect.replace(
+        stmt = self.loader.dialect.replace(
             "planet_exploit",
             ["planet_id", "type_id", "output", "richness", "richness_value", "location_index"])
-        RICHNESS = ['poor', 'medium', 'rich', 'perfect']
-        with self.db.engine.connect() as conn:
+        richness = ['poor', 'medium', 'rich', 'perfect']
+        with self.loader.engine.connect() as conn:
             for planet in raw.values():  # type: Dict[str, Any]
                 p_id = planet["planet_id"]
                 for res in planet["resource_info"].values():  # type: Dict[str, Union[int, float]]
@@ -298,7 +298,7 @@ class UniverseLoader:
                             "planet_id": p_id,
                             "type_id": res["resource_type_id"],
                             "output": res["init_output"],
-                            "richness": RICHNESS[rich_i - 1],
+                            "richness": richness[rich_i - 1],
                             "richness_value": res["richness_value"],
                             "location_index": res["location_index"]
                         })

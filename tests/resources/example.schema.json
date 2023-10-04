@@ -1,0 +1,42 @@
+{
+  "buildIndex": true,
+  "keyFooter": null,
+  "keyTypes": null,
+  "type": "dict",
+  "valueTypes": {
+    "attributes": {
+      "attr_a_int": {
+        "size": 4,
+        "type": "int"
+      },
+      "attr_b_bool": {
+        "size": 1,
+        "type": "bool"
+      },
+      "attr_c_string": {
+        "size": 4,
+        "type": "string"
+      },
+      "attr_d_float": {
+        "size": 4,
+        "type": "float"
+      },
+      "attr_e_list": {
+        "size": 4,
+        "type": "list"
+      },
+      "attr_d_no_overwrite": {
+        "size": 4,
+        "type": "str"
+      }
+    },
+    "attributesWithVariableOffsets": [
+
+    ],
+    "constantAttributeOffsets": {
+    },
+    "endOfFixedSizeData": 42,
+    "optionalValueLookups": {},
+    "type": "object"
+  }
+}

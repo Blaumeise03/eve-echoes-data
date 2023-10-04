@@ -7,9 +7,10 @@ import sqlalchemy
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
 
-from echoes_data import database, models
-from echoes_data.database import Dialect
-from echoes_data.universe import UniverseLoader
+from echoes_data.database import EchoesDB
+from echoes_data import models
+from echoes_data.utils import Dialect
+from echoes_data.extractor import UniverseLoader, BasicLoader
 
 logger = logging.getLogger()
 formatter = logging.Formatter(fmt="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s")
@@ -46,28 +47,29 @@ if __name__ == '__main__':
                                       pool_pre_ping=True,
                                       pool_recycle=True)
 
-    db = database.EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
-    db.init_db()
-    uni_loader = UniverseLoader(db)
+    db = EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
+    basic_loader = BasicLoader(db)
+    basic_loader.init_db()
+    uni_loader = UniverseLoader(basic_loader)
     modes = args.mode
 
     if "lang" in modes:
         for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
-            db.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
-        db.load_language(base_path="staticdata/staticdata/gettext", lang="zh", copy_to="source")
+            basic_loader.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
+        basic_loader.load_language(base_path="staticdata/staticdata/gettext", lang="zh", copy_to="source")
     else:
         logger.warning("Skipping language loading. It is recommended to load the language when the program is executed "
                        "the first time or the keys will be scrambled")
-    db.load_localized_cache()
+    basic_loader.load_localized_cache()
     if "base" in modes:
-        db.load_dict_data(
-            file="staticdata/staticdata/items/group.json", table=models.Group.__table__,
+        basic_loader.load_dict_data(
+            file="staticdata/staticdata/items/group.json", table=models.Group.__tablename__,
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
             default_values={"itemIds": "[]"},
             fields="id,itemIds,anchorable,anchored,fittableNonSingleton,iconPath,useBasePrice,localisedNameIndex,sourceName"
         )
-        db.load_dict_data(
-            file="staticdata/staticdata/items/category.json", table=models.Categories.__table__,
+        basic_loader.load_dict_data(
+            file="staticdata/staticdata/items/category.json", table=models.Categories.__tablename__,
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
             default_values={"groupIds": "[]"},
             fields="id,groupIds,localisedNameIndex,sourceName"
@@ -76,12 +78,12 @@ if __name__ == '__main__':
             path_item_type="staticdata/script/data_common/static/item/item_type.py",
             path_item_types_by_group="staticdata/staticdata/items/item_types_by_group.json",
             path_type_id_mapping="staticdata/py_data/data_common/static/item/type_id_mapping.json")
-        db.load_dict_data(
+        basic_loader.load_dict_data(
             file="staticdata/staticdata/dogma/units.json", table="unit",
             fields="id,description,displayName,unitName"
         )
     if "item_attrs" in modes:
-        db.load_dict_data(
+        basic_loader.load_dict_data(
             file="staticdata/staticdata/dogma/attributes.json", table="attributes",
             schema={"operator": ("attributeOperator", str), "to_attr_id": ("toAttrId", str)},
             zero_none_fields=["unitId"],
@@ -89,7 +91,7 @@ if __name__ == '__main__':
                    "maxAttributeId,attributeOperator,stackable,toAttrId,unitId,unitLocalisationKey,attributeSourceUnit,"
                    "attributeTip,attributeSourceName,nameLocalisationKey,tipLocalisationKey,attributeFormula"
         )
-        db.load_dict_data(
+        basic_loader.load_dict_data(
             file="staticdata/staticdata/dogma/effects.json", table="effects",
             zero_none_fields=["dischargeAttributeId", "durationAttributeId", "falloffAttributeId",
                               "fittingUsageChanceAttributeId", "rangeAttributeId", "trackingSpeedAttributeId"],
@@ -99,7 +101,7 @@ if __name__ == '__main__':
         )
     if "items" in modes:
         # ToDo: find preSkill, maybe exp? not sure about this one
-        db.load_all_dict_data(
+        basic_loader.load_all_dict_data(
             root_path="staticdata/staticdata/items", table=models.Item, skip_existing=True, primary_key="id",
             merge_with_file_path="staticdata/staticdata/items/item_dogma",
             schema={
@@ -123,7 +125,7 @@ if __name__ == '__main__':
             },
             fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
         )
-        db.load_dict_data(
+        basic_loader.load_dict_data(
             file="staticdata/staticdata/items/item_nanocore.json", table="item_nanocores",
             schema={
                 "key": ("itemId", int),
@@ -134,7 +136,7 @@ if __name__ == '__main__':
             default_values={"trainableModifierItems": "[]", "availableShips": "[]"},
             fields="itemId,filmGroup,filmQuality,availableShips,selectableModifierItems,trainableModifierItems"
         )
-        db.load_simple_data(
+        basic_loader.load_simple_data(
             file="staticdata/py_data/data_common/static/item/repackage_volume.json",
             root_key="data.group_ids",
             table="repackage_volume",
@@ -142,11 +144,11 @@ if __name__ == '__main__':
             key_type=int,
             value_field="volume",
             value_type=float,
-            logging=True
+            do_logging=True
         )
 
     if "item_extra" in modes:
-        db.load_simple_data(
+        basic_loader.load_simple_data(
             file="staticdata/py_data/data_common/static/item/repackage_volume.json",
             root_key="data.type_ids",
             table="repackage_volume",
@@ -154,27 +156,27 @@ if __name__ == '__main__':
             key_type=int,
             value_field="volume",
             value_type=float,
-            logging=True
+            do_logging=True
         )
-        db.load_reprocess(
+        basic_loader.load_reprocess(
             file_path="staticdata/py_data/data_common/static/reprocess.json"
         )
     if "bps" in modes:
-        db.load_manufacturing(
+        basic_loader.load_manufacturing(
             file_path="staticdata/py_data/data_common/static/spacestation/industry.json"
         )
     if "item_attrs" in modes:
-        db.load_all_item_attributes(
+        basic_loader.load_all_item_attributes(
             root_path="staticdata/staticdata/dogma", regex=re.compile(r"type_attributes_\d+\.json"),
             table="item_attributes", columns=("itemId", "attributeId", "value")
         )
-        db.load_item_attributes(
+        basic_loader.load_item_attributes(
             file="staticdata/staticdata/dogma/type_effects.json", table="item_effects",
             columns=("itemId", "effectId", "isDefault")
         )
     if "modifier" in modes:
         # Todo: changeRangeModuleNames is missing
-        db.load_dict_data(
+        basic_loader.load_dict_data(
             file="staticdata/py_data/data_common/static/dogma/cal_code_modifier.json",
             dict_root_key="data.meta",
             table="modifier_definition",
@@ -194,7 +196,7 @@ if __name__ == '__main__':
             },
             fields="code,changeTypes,attributeOnly,changeRanges,attributeIds,changeRangeModuleNames"
         )
-        db.load_dict_data(
+        basic_loader.load_dict_data(
             file="staticdata/py_data/data_common/static/dogma/cal_code_modifier.json",
             dict_root_key="data.code",
             table="modifier_value",
@@ -205,7 +207,7 @@ if __name__ == '__main__':
             },
             fields="code,attributes,typeName"
         )
-        db.init_item_modifiers()
+        basic_loader.init_item_modifiers()
 
     # ToDo: Find item_bonus_text
     # The descSpecial ids are already inside the items table, but the corresponding localisation ids are missing
