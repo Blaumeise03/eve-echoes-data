@@ -10,7 +10,7 @@ from colorama import just_fix_windows_console
 from echoes_data.database import EchoesDB
 from echoes_data import models
 from echoes_data.utils import Dialect
-from echoes_data.extractor import UniverseLoader, BasicLoader
+from echoes_data.extractor import UniverseLoader, BasicLoader, EchoesExtractor, PathLibrary
 
 logger = logging.getLogger()
 formatter = logging.Formatter(fmt="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s")
@@ -25,11 +25,12 @@ console.setLevel(logging.DEBUG)
 console.setFormatter(formatter)
 logger.addHandler(console)
 logger.setLevel("INFO")
-ALL_MODES = ["lang", "items", "item_extra", "item_attrs", "bps", "base", "modifier", "universe", "planet_exploit"]
+ALL_MODES = EchoesExtractor.get_all_scopes()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Data extractor for the game Eve Echoes",
                                      formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("root_path", type=str, help="The path to the staticdata folder")
     parser.add_argument("-m", "--mode",
                         type=str, nargs="+", choices=ALL_MODES,
                         default=ALL_MODES, help="The data that should be extracted")
@@ -48,214 +49,13 @@ if __name__ == '__main__':
                                       pool_recycle=True)
 
     db = EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
-    basic_loader = BasicLoader(db)
-    basic_loader.init_db()
-    uni_loader = UniverseLoader(basic_loader)
-    modes = args.mode
-
-    if "lang" in modes:
-        for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
-            basic_loader.load_language(base_path="staticdata/staticdata/gettext", lang=lang)
-        basic_loader.load_language(base_path="staticdata/staticdata/gettext", lang="zh", copy_to="source")
+    path_library = PathLibrary(args.root_path)
+    missing = path_library.verify_files()
+    if len(missing) > 0:
+        logger.warning("There are %s files missing, depending on the selected mode the import might fail", len(missing))
+        for k, p in missing:
+            logger.warning("File %s not found: %s", k, p)
     else:
-        logger.warning("Skipping language loading. It is recommended to load the language when the program is executed "
-                       "the first time or the keys will be scrambled")
-    basic_loader.load_localized_cache()
-    if "base" in modes:
-        basic_loader.load_dict_data(
-            file="staticdata/staticdata/items/group.json", table=models.Group.__tablename__,
-            schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
-            default_values={"itemIds": "[]"},
-            fields="id,itemIds,anchorable,anchored,fittableNonSingleton,iconPath,useBasePrice,localisedNameIndex,sourceName"
-        )
-        basic_loader.load_dict_data(
-            file="staticdata/staticdata/items/category.json", table=models.Categories.__tablename__,
-            schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
-            default_values={"groupIds": "[]"},
-            fields="id,groupIds,localisedNameIndex,sourceName"
-        )
-        uni_loader.load_item_types(
-            path_item_type="staticdata/script/data_common/static/item/item_type.py",
-            path_item_types_by_group="staticdata/staticdata/items/item_types_by_group.json",
-            path_type_id_mapping="staticdata/py_data/data_common/static/item/type_id_mapping.json")
-        basic_loader.load_dict_data(
-            file="staticdata/staticdata/dogma/units.json", table="unit",
-            fields="id,description,displayName,unitName"
-        )
-    if "item_attrs" in modes:
-        basic_loader.load_dict_data(
-            file="staticdata/staticdata/dogma/attributes.json", table="attributes",
-            schema={"operator": ("attributeOperator", str), "to_attr_id": ("toAttrId", str)},
-            zero_none_fields=["unitId"],
-            fields="id,attributeCategory,attributeName,available,chargeRechargeTimeId,defaultValue,highIsGood,"
-                   "maxAttributeId,attributeOperator,stackable,toAttrId,unitId,unitLocalisationKey,attributeSourceUnit,"
-                   "attributeTip,attributeSourceName,nameLocalisationKey,tipLocalisationKey,attributeFormula"
-        )
-        basic_loader.load_dict_data(
-            file="staticdata/staticdata/dogma/effects.json", table="effects",
-            zero_none_fields=["dischargeAttributeId", "durationAttributeId", "falloffAttributeId",
-                              "fittingUsageChanceAttributeId", "rangeAttributeId", "trackingSpeedAttributeId"],
-            fields="id,disallowAutoRepeat,dischargeAttributeId,durationAttributeId,effectCategory,effectName,"
-                   "electronicChance,falloffAttributeId,fittingUsageChanceAttributeId,guid,isAssistance,isOffensive,"
-                   "isWarpSafe,rangeAttributeId,rangeChance,trackingSpeedAttributeId"
-        )
-    if "items" in modes:
-        # ToDo: find preSkill, maybe exp? not sure about this one
-        basic_loader.load_all_dict_data(
-            root_path="staticdata/staticdata/items", table=models.Item, skip_existing=True, primary_key="id",
-            merge_with_file_path="staticdata/staticdata/items/item_dogma",
-            schema={
-                "zh_desc": ("sourceDesc", str),
-                "zh_name": ("sourceName", str),
-                "mining_exp_gain": ("exp", int)
-            },
-            localized={
-                "nameKey": "zh_name",
-                "descKey": "zh_desc",
-            },
-            default_values={
-                "npcCalCodes": "[]",
-                "normalDebris": "[]",
-                "corpCamera": "[]",
-                "abilityList": "[]",
-                "shipBonusCodeList": "[]",
-                "shipBonusSkillList": "[]",
-                "descSpecial": "[]",
-                "canBeJettisoned": False
-            },
-            fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
-        )
-        basic_loader.load_dict_data(
-            file="staticdata/staticdata/items/item_nanocore.json", table="item_nanocores",
-            schema={
-                "key": ("itemId", int),
-                "main_affix": ("selectableModifierItems", str),
-                "sub_affix": ("trainableModifierItems", str),
-                "available_ship": ("availableShips", str)},
-            localized={},
-            default_values={"trainableModifierItems": "[]", "availableShips": "[]"},
-            fields="itemId,filmGroup,filmQuality,availableShips,selectableModifierItems,trainableModifierItems"
-        )
-        basic_loader.load_simple_data(
-            file="staticdata/py_data/data_common/static/item/repackage_volume.json",
-            root_key="data.group_ids",
-            table="repackage_volume",
-            key_field="group_id",
-            key_type=int,
-            value_field="volume",
-            value_type=float,
-            do_logging=True
-        )
-
-    if "item_extra" in modes:
-        basic_loader.load_simple_data(
-            file="staticdata/py_data/data_common/static/item/repackage_volume.json",
-            root_key="data.type_ids",
-            table="repackage_volume",
-            key_field="type_id",
-            key_type=int,
-            value_field="volume",
-            value_type=float,
-            do_logging=True
-        )
-        basic_loader.load_reprocess(
-            file_path="staticdata/py_data/data_common/static/reprocess.json"
-        )
-    if "bps" in modes:
-        basic_loader.load_manufacturing(
-            file_path="staticdata/py_data/data_common/static/spacestation/industry.json"
-        )
-    if "item_attrs" in modes:
-        basic_loader.load_all_item_attributes(
-            root_path="staticdata/staticdata/dogma", regex=re.compile(r"type_attributes_\d+\.json"),
-            table="item_attributes", columns=("itemId", "attributeId", "value")
-        )
-        basic_loader.load_item_attributes(
-            file="staticdata/staticdata/dogma/type_effects.json", table="item_effects",
-            columns=("itemId", "effectId", "isDefault")
-        )
-    if "modifier" in modes:
-        # Todo: changeRangeModuleNames is missing
-        basic_loader.load_dict_data(
-            file="staticdata/py_data/data_common/static/dogma/cal_code_modifier.json",
-            dict_root_key="data.meta",
-            table="modifier_definition",
-            schema={
-                "key": ("code", str),
-                "change_types": ("changeTypes", str),
-                "attribute_only": ("attributeOnly", bool),
-                "change_ranges": ("changeRanges", str),
-                "attribute_ids": ("attributeIds", str)
-            },
-            default_values={
-                "changeTypes": "[]",
-                "changeRanges": "[]",
-                "attributeIds": "[]",
-                "attributeOnly": False,
-                "changeRangeModuleNames": "[]"
-            },
-            fields="code,changeTypes,attributeOnly,changeRanges,attributeIds,changeRangeModuleNames"
-        )
-        basic_loader.load_dict_data(
-            file="staticdata/py_data/data_common/static/dogma/cal_code_modifier.json",
-            dict_root_key="data.code",
-            table="modifier_value",
-            schema={
-                "key": ("code", str),
-                "attributes": ("attributes", str),
-                "type_name": ("typeName", str),
-            },
-            fields="code,attributes,typeName"
-        )
-        basic_loader.init_item_modifiers()
-
-    # ToDo: Find item_bonus_text
-    # The descSpecial ids are already inside the items table, but the corresponding localisation ids are missing
-
-    # ToDo: Add npc_equipment import from staticdata\py_data\data_common\static\dogma\npc_equipment.json
-
-    # ToDo: Find market_group
-
-    # ToDo: Find ship_modes
-    # ToDo: Find ship_nanocore
-
-    if "universe" in modes:
-        uni_loader.load_texts("staticdata/sigmadata/eve/universe/gettext.json")
-        uni_loader.load_data(
-            file_path="staticdata/sigmadata/eve/universe/regions.json",
-            table="regions",
-            columns=["id", "name", "x", "y", "z", "faction_id", "wormhole_class_id"])
-        uni_loader.load_data(
-            file_path="staticdata/sigmadata/eve/universe/constellations.json",
-            table="constellations",
-            columns=["id", "name", "x", "y", "z", "faction_id", "radius", "wormhole_class_id"])
-        systems = uni_loader.load_data(
-            file_path="staticdata/sigmadata/eve/universe/solar_systems.json",
-            table="solarsystems",
-            columns=["id", "name", "x", "y", "z", "security", "faction_id", "radius", "region_id", "constellation_id"],
-            return_raw=True, loading_bar=True)
-        uni_loader.load_group_id_cache()
-        uni_loader.load_system_cache()
-        uni_loader.load_data(
-            file_path="staticdata/sigmadata/eve/universe/stars.json",
-            table="celestials",
-            columns=["id", "name",
-                     # Compatible
-                     ("type_id", lambda cel: uni_loader.type_to_short_id[cel["type_id"]]),
-                     ("group_id", lambda cel: uni_loader.type_to_group_id[cel["type_id"]]),
-                     ("system_id", "solar_system_id"), "orbit_id", "x", "y", "z", "radius",
-                     "celestial_index", "orbit_index"],
-            name_func=uni_loader.get_celestial_name,
-            cache_celestials=True)
-        uni_loader.load_data(
-            file_path="staticdata/sigmadata/eve/universe/celestials.json",
-            table="celestials",
-            columns=["id", "name",
-                     ("type_id", lambda cel: uni_loader.type_to_short_id[cel["type_id"]]),
-                     ("group_id", lambda cel: uni_loader.type_to_group_id[cel["type_id"]]),
-                     ("system_id", "solar_system_id"), "orbit_id", "x", "y", "z", "radius",
-                     "celestial_index", "orbit_index"],
-            name_func=uni_loader.get_celestial_name,
-            cache_celestials=True, loading_bar=True)
-    if "planet_exploit" in modes:
-        uni_loader.load_planetary_production("staticdata/manual_staticdata/universe/planet_exploit_resource.json")
+        logger.info("File paths using root_path %s verified", args.root_path)
+    data_extractor = EchoesExtractor(db, path_library)
+    data_extractor.extract_data(args.mode)

@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Type, Optional, Dict, Tuple
+from typing import Type, Optional, Dict, Tuple, Union
 
 
 def decapitalize(s, upper_rest=False):
@@ -25,7 +25,7 @@ def to_type(string: str) -> Type:
             return str
 
 
-def load_schema(file: str, schema: Optional[Dict] = None) -> Dict[str, Tuple[str, Type]]:
+def load_schema(file: Union[str, os.PathLike], schema: Optional[Dict] = None) -> Dict[str, Tuple[str, Type]]:
     if not os.path.exists(file):
         return schema
     with open(file, "r") as f:

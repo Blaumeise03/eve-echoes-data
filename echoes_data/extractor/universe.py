@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import logging
+import os
 from collections import defaultdict
 from typing import Dict, List, Any, Optional, Callable, DefaultDict, Union
 
@@ -37,7 +38,7 @@ class UniverseLoader:
         self.solar_systems = {}  # type: Dict[int, str]
         self.celestial_cache = {}  # type: Dict[int, Dict[str, Any]]
 
-    def load_texts(self, file_path: str):
+    def load_texts(self, file_path: Union[str, os.PathLike]):
         logger.info("Loading localized strings")
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
@@ -120,9 +121,9 @@ class UniverseLoader:
                 cel_index=NUMBER_TO_ROMA[celestial_index])
 
     def load_item_types(self,
-                        path_item_type: str,
-                        path_item_types_by_group: Optional[str] = None,
-                        path_type_id_mapping: Optional[str] = None):
+                        path_item_type: Union[str, os.PathLike],
+                        path_item_types_by_group: Optional[Union[str, os.PathLike]] = None,
+                        path_type_id_mapping: Optional[Union[str, os.PathLike]] = None):
         # Reversed engineered from
         # script/data_common/static/item/item_type for long Type and Group IDs
         spec = importlib.util.spec_from_file_location("eve.item_types", path_item_type)
@@ -172,7 +173,7 @@ class UniverseLoader:
                     len(category_ids), len(group_ids), len(type_ids))
 
     def load_data(self,
-                  file_path: str,
+                  file_path: Union[str, os.PathLike],
                   table: str,
                   columns: List[str],
                   direct_name=False,
@@ -274,7 +275,7 @@ class UniverseLoader:
                 conn.execute(stmt)
             conn.commit()
 
-    def load_planetary_production(self, file_path: str):
+    def load_planetary_production(self, file_path: Union[str, os.PathLike]):
         logger.info("Loading planetary production data from %s", file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)

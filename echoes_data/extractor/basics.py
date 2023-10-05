@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Dict, Any, Tuple, Type, Optional, List, Union, Set, TYPE_CHECKING
 
 from sqlalchemy import Table, insert, delete, select, Connection, Row
@@ -77,7 +78,7 @@ class BasicLoader:
         conn.execute(stmt, data)
 
     def load_dict_data(self,
-                       file: str,
+                       file: Path,
                        table: str,
                        merge_with_file: Optional[str] = None,
                        auto_schema=True,
@@ -100,7 +101,7 @@ class BasicLoader:
             if auto_schema:
                 # Load json schema from the corresponding *.schema.json
                 # The keys will be converted to camelCase
-                schema = load_schema(file=file.replace(".json", ".schema.json"),
+                schema = load_schema(file=file.with_suffix(".schema.json"),
                                      schema=schema)
                 if merge_with_file:
                     load_schema(file=merge_with_file.replace(".json", ".schema.json") if merge_with_file else None,
@@ -176,10 +177,10 @@ class BasicLoader:
             conn.commit()
 
     def load_all_dict_data(self,
-                           root_path: str,
+                           root_path: Path,
                            table: Type[models.Base],
                            regex: Optional[re.Pattern] = None,
-                           merge_with_file_path: Optional[str] = None,
+                           merge_with_file_path: Union[str, os.PathLike, None] = None,
                            auto_schema=True,
                            schema: Optional[Dict[str, Tuple[str, Type]]] = None,
                            fields: Optional[str] = None,
@@ -207,7 +208,7 @@ class BasicLoader:
             if merge_with_file_path and os.path.exists(f"{merge_with_file_path}/{filename}"):
                 file_2 = f"{merge_with_file_path}/{filename}"
             self.load_dict_data(
-                file=f"{root_path}/{filename}", table=table.__tablename__, merge_with_file=file_2,
+                file=root_path / filename, table=table.__tablename__, merge_with_file=file_2,
                 auto_schema=auto_schema,
                 schema=schema, fields=fields, default_values=default_values, localized=localized, skip=existing,
                 primary_key=primary_key
@@ -232,7 +233,7 @@ class BasicLoader:
             conn.commit()
 
     def load_simple_data(self,
-                         file: str,
+                         file: Union[str, os.PathLike],
                          table: str,
                          key_field: str,
                          value_field: str,
@@ -265,15 +266,15 @@ class BasicLoader:
         if do_logging:
             logger.info("Inserted %s rows from %s : %s into %s", len(batch), file, root_key, table)
 
-    def load_language(self, base_path: str, lang: str, copy_to: Optional[str] = None):
-        directory = os.fsencode(f"{base_path}/{lang}")
+    def load_language(self, base_path: Path, lang: str, copy_to: Optional[str] = None):
+        directory = os.fsencode(base_path / lang)
         count = 0
         files = list(filter(lambda f: re.match(r"\d+\.json", f), map(lambda f: os.fsdecode(f), os.listdir(directory))))
         num = len(files)
-        logger.info("Loading language %s from %s files into the database from %s", lang, num, f"{base_path}/{lang}")
+        logger.info("Loading language %s from %s files into the database from %s", lang, num, base_path / lang)
         for filename in files:
             self.load_simple_data(
-                file=f"{base_path}/{lang}/{filename}",
+                file=base_path / lang / filename,
                 table="localised_strings",
                 key_field="id", value_field=lang,
                 key_type=int, value_type=str, second_value_field=copy_to,
@@ -354,7 +355,7 @@ class BasicLoader:
             string = string.replace(m.group(2), str(self.get_localized_id(m.group(2), save_new=True, only_cache=True)))
         return string
 
-    def load_item_attributes(self, file: str, table: str, columns: Tuple[str, str, str]):
+    def load_item_attributes(self, file: Union[str, os.PathLike], table: str, columns: Tuple[str, str, str]):
         with open(file, "r", encoding="utf-8") as f:
             raw = json.load(f)
         batch = []
@@ -368,7 +369,7 @@ class BasicLoader:
         logger.info("Saved %s rows into table %s from file %s", len(batch), table, file)
 
     def load_all_item_attributes(self,
-                                 root_path: str,
+                                 root_path: Union[str, os.PathLike],
                                  table: str,
                                  columns: Tuple[str, str, str],
                                  regex: Optional[re.Pattern] = None
@@ -463,7 +464,7 @@ class BasicLoader:
                     utils.print_loading_bar(i / num)
         logger.info("Inserted %s item modifiers into %s", count, models.ItemModifiers.__tablename__)
 
-    def load_reprocess(self, file_path: str):
+    def load_reprocess(self, file_path: Union[str, os.PathLike]):
         logger.info("Loading reprocess data from %s", file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
@@ -494,7 +495,7 @@ class BasicLoader:
             conn.commit()
         logger.info("Inserted %s rows into reprocess", i)
 
-    def load_manufacturing(self, file_path: str):
+    def load_manufacturing(self, file_path: Union[str, os.PathLike]):
         logger.info("Loading manufacturing data from %s", file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
