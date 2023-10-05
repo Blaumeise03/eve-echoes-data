@@ -1,0 +1,14 @@
+{
+  "30001": {
+    "can_be_jettisoned": false,
+    "main_cal_code": "/Cal/Code/1/",
+    "ship_bonus_code_list": [
+      "/ShipBonus/A/",
+      "/ShipBonus/B/"
+    ],
+    "ship_bonus_skill_list": [
+      1234,
+      5678
+    ]
+  }
+}

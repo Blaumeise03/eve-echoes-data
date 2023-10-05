@@ -1,0 +1,13 @@
+{
+  "data": {
+    "item_baseartifice": {
+      "30001": {
+        "item_id1": 30002,
+        "item_number1": 143,
+        "item_id2": 30002456567,
+        "item_number2": 0,
+        "item_id3": 100000000000
+      }
+    }
+  }
+}

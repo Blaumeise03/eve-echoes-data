@@ -1,0 +1,267 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "appearance_id": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "appearance_reset_material": {
+        "fixedItemSize": 8,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "appearance_reset_material_ammount": {
+        "fixedItemSize": 8,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "available_ship": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "fail_probability_bonus": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "precision": "double",
+          "size": 8,
+          "type": "float"
+        },
+        "type": "list"
+      },
+      "film_group": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "film_quality": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "film_tag": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "gold_attrs": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "gold_nanocore_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "gold_upgrade_material": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "gold_upgrade_material_ammount": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "icon_ship": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "is_special_impact": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "main_affix": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "main_affix_wash_material": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "main_affix_wash_material_ammount": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "main_ui_icon_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "melt_isk": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "mode_desc": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "nanocore_available_time": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "purple_nanocore_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "purple_random_count": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "redeem_box_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "redeem_material_cost": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "sub_affix": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 8,
+          "itemTypes": {
+            "size": 8,
+            "type": "long"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "sub_affix_wash_material": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 8,
+          "itemTypes": {
+            "size": 8,
+            "type": "long"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "sub_affix_wash_material_ammount": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 4,
+          "itemTypes": {
+            "size": 4,
+            "type": "int"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "sub_affix_weight": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 4,
+          "itemTypes": {
+            "size": 4,
+            "type": "int"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "time_max": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "up_grid": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "up_materials": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 8,
+          "itemTypes": {
+            "size": 8,
+            "type": "long"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "up_materials_ammount": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 4,
+          "itemTypes": {
+            "size": 4,
+            "type": "int"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "up_probability": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 8,
+          "itemTypes": {
+            "precision": "double",
+            "size": 8,
+            "type": "float"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      }
+    }
+  }
+}

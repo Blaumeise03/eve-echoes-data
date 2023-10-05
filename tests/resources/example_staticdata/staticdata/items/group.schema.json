@@ -1,0 +1,48 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "anchorable": {
+        "default": false,
+        "isOptional": true,
+        "size": 1,
+        "type": "bool"
+      },
+      "anchored": {
+        "default": false,
+        "isOptional": true,
+        "size": 1,
+        "type": "bool"
+      },
+      "back_icon_id": {
+        "default": "",
+        "isOptional": true,
+        "type": "string"
+      },
+      "fittable_non_singleton": {
+        "default": false,
+        "isOptional": true,
+        "size": 1,
+        "type": "bool"
+      },
+      "icon_path": {
+        "default": "",
+        "isOptional": true,
+        "type": "string"
+      },
+      "top_icon_id": {
+        "default": "",
+        "isOptional": true,
+        "type": "string"
+      },
+      "use_base_price": {
+        "default": false,
+        "isOptional": true,
+        "size": 1,
+        "type": "bool"
+      },
+      "zh_name": {
+        "type": "string"
+      }
+    }
+  }
+}

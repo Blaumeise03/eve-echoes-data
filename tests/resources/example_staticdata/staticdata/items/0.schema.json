@@ -1,0 +1,258 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "ability_list": {
+        "fixedItemSize": 4,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 4,
+          "type": "int"
+        },
+        "type": "list"
+      },
+      "base_price": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "big_icon_path": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "call_monster_list": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "call_monster_max_num": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "call_monster_same_time": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "capacity": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "capital_wreck": {
+        "isOptional": true,
+        "size": 1,
+        "type": "bool"
+      },
+      "contract_allowance": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "corp_camera": {
+        "fixedItemSize": 4,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 4,
+          "type": "float"
+        },
+        "type": "list"
+      },
+      "corporation_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "desc_special": {
+        "fixedItemSize": 4,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 4,
+          "type": "int"
+        },
+        "type": "list"
+      },
+      "elite_npc": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "faction_id": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "fun_param": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "graphic_id": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "icon_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "in_sigma": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "is_hide_chance": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "is_obtainable": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "is_omega": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "is_rookie_insurance": {
+        "isOptional": true,
+        "precision": "double",
+        "size": 8,
+        "type": "float"
+      },
+      "lock_skin": {
+        "isOptional": true,
+        "itemTypes": {
+          "type": "string"
+        },
+        "type": "list"
+      },
+      "lock_time": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "lucky_point": {
+        "isOptional": true,
+        "itemTypes": {
+          "fixedItemSize": 8,
+          "itemTypes": {
+            "size": 8,
+            "type": "long"
+          },
+          "type": "list"
+        },
+        "type": "list"
+      },
+      "lucky_point_factor": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "market_group_id": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "mass": {
+        "isOptional": true,
+        "precision": "double",
+        "size": 8,
+        "type": "float"
+      },
+      "medal_source_text": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "mining_exp_gain": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "module_group_type": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "portrait_path": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "prefab_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "product": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "published": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "race_id": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "radius": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "skin_id": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "sof_faction_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "sound_id": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "source_id": {
+        "isOptional": true,
+        "itemTypes": {
+          "type": "string"
+        },
+        "type": "list"
+      },
+      "suffix": {
+        "isOptional": true,
+        "size": 4,
+        "type": "int"
+      },
+      "unfit_price": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "volume": {
+        "isOptional": true,
+        "precision": "double",
+        "size": 8,
+        "type": "float"
+      },
+      "zh_desc": {
+        "type": "string"
+      },
+      "zh_name": {
+        "type": "string"
+      }
+    }
+  }
+}

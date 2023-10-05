@@ -1,0 +1,17 @@
+{
+  "30001": {
+    "ability_list": [
+      1,
+      2
+    ],
+    "is_omega": 0,
+    "market_group_id": 2000001,
+    "mass": 1234.0,
+    "zh_desc": "Item A description (zh)",
+    "zh_name": "Item A (zh)"
+  },
+  "30002": {
+    "zh_desc": "Nanocore description (zh)",
+    "zh_name": "Nanocore (zh)"
+  }
+}

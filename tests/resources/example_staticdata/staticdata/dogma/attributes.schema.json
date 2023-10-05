@@ -1,0 +1,94 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "attribute_category": {
+        "type": "int"
+      },
+      "attribute_id": {
+        "type": "int"
+      },
+      "attribute_name": {
+        "type": "string"
+      },
+      "available": {
+        "type": "bool"
+      },
+      "charge_recharge_time_id": {
+        "type": "int"
+      },
+      "de_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "default_value": {
+        "type": "float"
+      },
+      "en_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "expired_threshold_id": {
+        "isOptional": true,
+        "type": "int"
+      },
+      "expired_time_id": {
+        "isOptional": true,
+        "type": "int"
+      },
+      "expired_value_id": {
+        "isOptional": true,
+        "type": "int"
+      },
+      "expired_value_op": {
+        "isOptional": true,
+        "type": "int"
+      },
+      "fr_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "high_is_good": {
+        "type": "bool"
+      },
+      "increase_time_id": {
+        "isOptional": true,
+        "type": "int"
+      },
+      "ja_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "max_attribute_id": {
+        "type": "int"
+      },
+      "operator": {
+        "fixedItemSize": 4,
+        "itemTypes": {
+          "type": "int"
+        },
+        "type": "list"
+      },
+      "ru_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "stackable": {
+        "type": "bool"
+      },
+      "to_attr_id": {
+        "fixedItemSize": 4,
+        "itemTypes": {
+          "type": "int"
+        },
+        "type": "list"
+      },
+      "unit_id": {
+        "type": "int"
+      },
+      "zh_name": {
+        "isOptional": true,
+        "type": "string"
+      }
+    }
+  }
+}

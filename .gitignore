@@ -1,5 +1,5 @@
-venv/
-staticdata/
+/venv/
+/staticdata/
 .idea/
 *.db
 *.uml

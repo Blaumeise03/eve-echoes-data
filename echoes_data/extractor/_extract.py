@@ -3,7 +3,7 @@ import logging
 import os.path
 import re
 from pathlib import Path
-from typing import List, Union, Callable, Tuple
+from typing import List, Union, Callable, Tuple, Optional
 
 from echoes_data import models
 from echoes_data.database import EchoesDB
@@ -27,6 +27,11 @@ class PathLibrary:
             if not os.path.exists(path):
                 missing.append((key, path))
         return missing
+
+    def get_file_list(self) -> List[Tuple[str, Path]]:
+        res = [(key, getattr(self, key)) for key in filter(lambda k: k.startswith("path_"), dir(self))]
+        res.sort(key=lambda t: t[1])
+        return res
 
     @property
     def path_gettext(self):
@@ -205,8 +210,10 @@ class EchoesExtractor:
         return BaseExtractor.get_all_scopes()
 
     @BaseExtractor.extractor(name="lang")
-    def load_lang(self):
-        for lang in ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]:
+    def load_lang(self, langs: Optional[List[str]] = None):
+        if langs is None:
+            langs = ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]
+        for lang in langs:
             self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang=lang)
         self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang="zh", copy_to="source")
 
@@ -225,6 +232,7 @@ class EchoesExtractor:
         self.basic_loader.load_dict_data(
             file=self.path_library.path_category, table=models.Categories.__tablename__,
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
+            # ToDo: Fix loading of groups (the ids are already in the file but not loaded)
             default_values={"groupIds": "[]"},
             fields="id,groupIds,localisedNameIndex,sourceName"
         )
@@ -301,6 +309,16 @@ class EchoesExtractor:
 
     @BaseExtractor.extractor(name="item_extra", requires=["items", "base"])
     def load_item_extra(self):
+        self.basic_loader.load_simple_data(
+            file=self.path_library.path_repackage,
+            root_key="data.group_ids",
+            table=models.RepackageVolume.__tablename__,
+            key_field="group_id",
+            key_type=int,
+            value_field="volume",
+            value_type=float,
+            do_logging=True
+        )
         self.basic_loader.load_simple_data(
             file=self.path_library.path_repackage,
             root_key="data.type_ids",

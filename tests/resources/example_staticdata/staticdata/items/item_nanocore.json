@@ -1,0 +1,29 @@
+{
+  "30002": {
+    "appearance_id": "some_appearance_id",
+    "appearance_reset_material": [
+      1234
+    ],
+    "appearance_reset_material_ammount": [
+      15
+    ],
+    "available_ship": [
+      567,
+      687
+    ],
+    "film_group": "filmGroupA",
+    "film_quality": 1,
+    "icon_ship": "iconShipA",
+    "main_affix": [
+      10,
+      20,
+      30
+    ],
+    "main_affix_wash_material": [
+      60
+    ],
+    "main_affix_wash_material_ammount": [
+      42
+    ]
+  }
+}

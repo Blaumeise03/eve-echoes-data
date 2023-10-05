@@ -1,0 +1,14 @@
+{
+  "10": {
+    "groups": [
+      10000, 10001
+    ],
+    "zh_name": "Category 0 zh"
+  },
+  "11": {
+    "groups": [
+      10002
+    ],
+    "zh_name": "Category 1 zh"
+  }
+}

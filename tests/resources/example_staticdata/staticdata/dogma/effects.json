@@ -1,0 +1,21 @@
+{
+  "1": {
+    "ammo_consume_attr_id": 0,
+    "disallow_auto_repeat": false,
+    "discharge_attribute_id": 2,
+    "duration_attribute_id": 1,
+    "effect_category": 1,
+    "effect_id": 1,
+    "effect_name": "effectA",
+    "falloff_attribute_id": 1,
+    "guid": "effects.A",
+    "instant_sync": false,
+    "is_assistance": false,
+    "is_offensive": true,
+    "is_warp_safe": false,
+    "need_robot_test": false,
+    "range_attribute_id": 0,
+    "react_delay_attr_id": 0,
+    "tracking_speed_attribute_id": 0
+  }
+}

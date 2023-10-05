@@ -1,0 +1,17 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "groups": {
+        "fixedItemSize": 4,
+        "itemTypes": {
+          "size": 4,
+          "type": "int"
+        },
+        "type": "list"
+      },
+      "zh_name": {
+        "type": "string"
+      }
+    }
+  }
+}

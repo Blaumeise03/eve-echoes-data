@@ -1,0 +1,69 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "active_cal_code": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "assist_cal_code": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "can_be_jettisoned": {
+        "default": false,
+        "isOptional": true,
+        "size": 1,
+        "type": "bool"
+      },
+      "default_ammo": {
+        "isOptional": true,
+        "size": 8,
+        "type": "long"
+      },
+      "extra_cal_code": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "main_cal_code": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "npc_cal_codes": {
+        "isOptional": true,
+        "itemTypes": {
+          "type": "string"
+        },
+        "type": "list"
+      },
+      "online_cal_code": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "ship_bonus_code_list": {
+        "isOptional": true,
+        "itemTypes": {
+          "type": "string"
+        },
+        "type": "list"
+      },
+      "ship_bonus_skill_list": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      },
+      "size_license": {
+        "fixedItemSize": 8,
+        "isOptional": true,
+        "itemTypes": {
+          "size": 8,
+          "type": "long"
+        },
+        "type": "list"
+      }
+    }
+  }
+}

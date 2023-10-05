@@ -1,0 +1,57 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "ammo_consume_attr_id": {
+        "type": "int"
+      },
+      "disallow_auto_repeat": {
+        "type": "bool"
+      },
+      "discharge_attribute_id": {
+        "type": "int"
+      },
+      "duration_attribute_id": {
+        "type": "int"
+      },
+      "effect_category": {
+        "type": "int"
+      },
+      "effect_id": {
+        "type": "int"
+      },
+      "effect_name": {
+        "type": "string"
+      },
+      "falloff_attribute_id": {
+        "type": "int"
+      },
+      "guid": {
+        "type": "string"
+      },
+      "instant_sync": {
+        "type": "bool"
+      },
+      "is_assistance": {
+        "type": "bool"
+      },
+      "is_offensive": {
+        "type": "bool"
+      },
+      "is_warp_safe": {
+        "type": "bool"
+      },
+      "need_robot_test": {
+        "type": "bool"
+      },
+      "range_attribute_id": {
+        "type": "int"
+      },
+      "react_delay_attr_id": {
+        "type": "int"
+      },
+      "tracking_speed_attribute_id": {
+        "type": "int"
+      }
+    }
+  }
+}

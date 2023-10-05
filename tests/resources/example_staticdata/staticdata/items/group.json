@@ -1,0 +1,32 @@
+{
+  "10000": {
+    "anchorable": false,
+    "anchored": false,
+    "back_icon_id": "",
+    "fittable_non_singleton": false,
+    "icon_path": "group_1_icon.png",
+    "top_icon_id": "",
+    "use_base_price": false,
+    "zh_name": "Group 1 zh"
+  },
+  "10001": {
+    "anchorable": true,
+    "anchored": true,
+    "back_icon_id": "",
+    "fittable_non_singleton": true,
+    "icon_path": "",
+    "top_icon_id": "",
+    "use_base_price": true,
+    "zh_name": "Group 2 zh"
+  },
+  "10002": {
+    "anchorable": false,
+    "anchored": false,
+    "back_icon_id": "",
+    "fittable_non_singleton": false,
+    "icon_path": "",
+    "top_icon_id": "",
+    "use_base_price": false,
+    "zh_name": "Group 3 zh"
+  }
+}

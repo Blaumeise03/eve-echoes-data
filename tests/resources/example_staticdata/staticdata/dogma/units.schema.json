@@ -1,0 +1,17 @@
+{
+  "valueTypes": {
+    "attributes": {
+      "description": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "display_name": {
+        "isOptional": true,
+        "type": "string"
+      },
+      "unit_name": {
+        "type": "string"
+      }
+    }
+  }
+}

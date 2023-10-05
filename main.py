@@ -38,9 +38,26 @@ if __name__ == '__main__':
                         help="The url to the database, e.g. \nmariadb+mariadbconnector://user:password@localhost:3306/database")
     parser.add_argument("--dialect", type=str, choices=["sqlite", "mysql"], default="sqlite",
                         help="The database dialect, only sqlite and mysql are supported")
+    parser.add_argument("--only_list_files", action="store_true",
+                        help="Instead of extracting the data, a list of all required files will get printed")
 
     args = parser.parse_args()
     just_fix_windows_console()
+    path_library = PathLibrary(args.root_path)
+    missing = path_library.verify_files()
+    if args.only_list_files:
+        logger.info("====== Required files ======")
+        for name, path in path_library.get_file_list():
+            name = name.replace("path_", "")
+            logger.info(f"{name: <19}: %s", path)
+        exit(0)
+
+    if len(missing) > 0:
+        logger.warning("There are %s files missing, depending on the selected mode the import might fail", len(missing))
+        for k, p in missing:
+            logger.warning("File %s not found: %s", k, p)
+    else:
+        logger.info("File paths using root_path %s verified", args.root_path)
 
     # Sqlalchemy setup
     engine = sqlalchemy.create_engine(args.database,
@@ -49,13 +66,5 @@ if __name__ == '__main__':
                                       pool_recycle=True)
 
     db = EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
-    path_library = PathLibrary(args.root_path)
-    missing = path_library.verify_files()
-    if len(missing) > 0:
-        logger.warning("There are %s files missing, depending on the selected mode the import might fail", len(missing))
-        for k, p in missing:
-            logger.warning("File %s not found: %s", k, p)
-    else:
-        logger.info("File paths using root_path %s verified", args.root_path)
     data_extractor = EchoesExtractor(db, path_library)
     data_extractor.extract_data(args.mode)
