@@ -11,7 +11,7 @@ from sqlalchemy.orm import aliased
 from echoes_data import utils, models
 from echoes_data.extractor.basics import BasicLoader
 
-logger = logging.getLogger("ee.universe")
+logger = logging.getLogger("ee.extractor.universe")
 NUMBER_TO_ROMA = [
     "", "I", "II", "III", "IV", "V",
     "VI", "VII", "VIII",
@@ -187,17 +187,18 @@ class UniverseLoader:
         with open(file_path, "r", encoding="utf-8") as file:
             raw = json.load(file)
         num = len(raw)
+        if loading_bar:
+            utils.activate_loading_bar(num, info=file_path)
         if cache_celestials:
             logger.info("Caching %s celestials", num)
             i = 0
-            if loading_bar:
-                utils.print_loading_bar(i / num)
             for k, v in raw.items():
                 self.celestial_cache[int(k)] = v
                 if loading_bar and i % 10000 == 0:
-                    utils.print_loading_bar(i / num)
+                    utils.print_loading_bar(i)
                 i += 1
         if loading_bar:
+            utils.activate_loading_bar(num, f"Inserting into table {table}")
             logger.info("Inserting %s entries into %s", num, table)
         stmt = self.loader.dialect.upsert(table, list(map(lambda a: a if type(a) != tuple else a[0], columns)))
         overflow_items = []
@@ -255,9 +256,11 @@ class UniverseLoader:
                         data[k] = None
                 conn.execute(stmt, data)
                 if loading_bar and i % 1000 == 0:
-                    utils.print_loading_bar(i / num)
+                    utils.print_loading_bar(i)
                 i += 1
             conn.commit()
+        if loading_bar:
+            utils.clear_loading_bar()
         if len(not_found) > 0:
             logger.warning("Did not find these keys in file %s: %s", file_path, not_found)
         if len(overflow_items) > 0:
@@ -294,12 +297,6 @@ class UniverseLoader:
             logger.info("Inserted %s stargate connections into database", len(stargates))
 
     def init_cobalt_edge(self):
-        sql = ("SELECT sys_from.id, sys_to.id "
-               "FROM solarsystems as sys_from "
-               "JOIN eve_test.regions r_from on r_from.id = sys_from.region_id "
-               "JOIN stargates gate on gate.from_sys_id = sys_from.id "
-               "JOIN solarsystems sys_to on sys_to.id = gate.to_sys_id "
-               "WHERE r_from.name = 'Cobalt Edge' and sys_from.constellation_id = sys_to.constellation_id;")
         sys_from = aliased(models.Solarsystem)
         sys_to = aliased(models.Solarsystem)
         stmt = (
@@ -323,37 +320,37 @@ class UniverseLoader:
             logger.info("Inserted %s system connections for region Cobalt Edge", len(connections))
             conn.commit()
 
-
-def load_planetary_production(self, file_path: Union[str, os.PathLike]):
-    logger.info("Loading planetary production data from %s", file_path)
-    with open(file_path, "r", encoding="utf-8") as file:
-        raw = json.load(file)
-    num = len(raw)
-    logger.info("Loaded %s planets, inserting into database", num)
-    utils.print_loading_bar(0)
-    i = 0
-    j = 0
-    stmt = self.loader.dialect.replace(
-        "planet_exploit",
-        ["planet_id", "type_id", "output", "richness", "richness_value", "location_index"])
-    richness = ['poor', 'medium', 'rich', 'perfect']
-    with self.loader.engine.connect() as conn:
-        for planet in raw.values():  # type: Dict[str, Any]
-            p_id = planet["planet_id"]
-            for res in planet["resource_info"].values():  # type: Dict[str, Union[int, float]]
-                rich_i = res["richness_index"]
-                conn.execute(
-                    stmt,
-                    {
-                        "planet_id": p_id,
-                        "type_id": res["resource_type_id"],
-                        "output": res["init_output"],
-                        "richness": richness[rich_i - 1],
-                        "richness_value": res["richness_value"],
-                        "location_index": res["location_index"]
-                    })
-                j += 1
-            if i % 100 == 0:
-                utils.print_loading_bar(i / num)
-            i += 1
-    logger.info("Inserted %s resources from %s planets into the database", j, num)
+    def load_planetary_production(self, file_path: Union[str, os.PathLike]):
+        logger.info("Loading planetary production data from %s", file_path)
+        with open(file_path, "r", encoding="utf-8") as file:
+            raw = json.load(file)
+        num = len(raw)
+        logger.info("Loaded %s planets, inserting into database", num)
+        utils.activate_loading_bar(num)
+        i = 0
+        j = 0
+        stmt = self.loader.dialect.replace(
+            "planet_exploit",
+            ["planet_id", "type_id", "output", "richness", "richness_value", "location_index"])
+        richness = ['poor', 'medium', 'rich', 'perfect']
+        with self.loader.engine.connect() as conn:
+            for planet in raw.values():  # type: Dict[str, Any]
+                p_id = planet["planet_id"]
+                for res in planet["resource_info"].values():  # type: Dict[str, Union[int, float]]
+                    rich_i = res["richness_index"]
+                    conn.execute(
+                        stmt,
+                        {
+                            "planet_id": p_id,
+                            "type_id": res["resource_type_id"],
+                            "output": res["init_output"],
+                            "richness": richness[rich_i - 1],
+                            "richness_value": res["richness_value"],
+                            "location_index": res["location_index"]
+                        })
+                    j += 1
+                if i % 100 == 0:
+                    utils.print_loading_bar(i)
+                i += 1
+        utils.clear_loading_bar()
+        logger.info("Inserted %s resources from %s planets into the database", j, num)

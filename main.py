@@ -1,30 +1,16 @@
 import argparse
 import logging
-import re
 import sys
 
 import sqlalchemy
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
 
+from echoes_data import utils
 from echoes_data.database import EchoesDB
-from echoes_data import models
+from echoes_data.extractor import EchoesExtractor, PathLibrary
 from echoes_data.utils import Dialect
-from echoes_data.extractor import UniverseLoader, BasicLoader, EchoesExtractor, PathLibrary
 
-logger = logging.getLogger()
-formatter = logging.Formatter(fmt="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s")
-# File log handler
-# file_handler = logging.FileHandler(log_filename)
-# file_handler.setLevel(logging.INFO)
-# file_handler.setFormatter(formatter)
-# logger.addHandler(file_handler)
-# Console log handler
-console = logging.StreamHandler(sys.stdout)
-console.setLevel(logging.DEBUG)
-console.setFormatter(formatter)
-logger.addHandler(console)
-logger.setLevel("INFO")
 ALL_MODES = EchoesExtractor.get_all_scopes()
 
 if __name__ == '__main__':
@@ -44,7 +30,18 @@ if __name__ == '__main__':
                         help="Drops all tables before reloading the data (doesn't affect third-party tables)")
 
     args = parser.parse_args()
-    just_fix_windows_console()
+
+    utils.enable_global_loading_bar()
+
+    logger = logging.getLogger()
+    formatter = logging.Formatter(fmt="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s")
+    logger.setLevel("INFO")
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(logging.DEBUG)
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+
     path_library = PathLibrary(args.root_path)
     missing = path_library.verify_files()
     if args.only_list_files:

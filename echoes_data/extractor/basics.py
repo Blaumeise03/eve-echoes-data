@@ -14,7 +14,7 @@ from echoes_data.utils import load_schema
 if TYPE_CHECKING:
     from echoes_data.database import EchoesDB
 
-logger = logging.getLogger("ee.db")
+logger = logging.getLogger("ee.extractor.basic")
 
 name_regexp = re.compile(r"(\{([a-zA-Z_-]+:)[^{}]+})")
 name_corrected_regexp = re.compile(r"(\{[^{}]+})")
@@ -85,7 +85,7 @@ class BasicLoader:
     def load_dict_data(self,
                        file: Path,
                        table: str,
-                       merge_with_file: Optional[str] = None,
+                       merge_with_file: Optional[Path] = None,
                        auto_schema=True,
                        schema: Optional[Dict[str, Tuple[str, Type]]] = None,
                        zero_none_fields: Optional[List[str]] = None,
@@ -94,8 +94,11 @@ class BasicLoader:
                        localized: Optional[Dict[str, str]] = None,
                        dict_root_key: Optional[str] = None,
                        skip: Union[List[Any], Set[Any], None] = None,
-                       primary_key: Optional[str] = None):
-        logger.info("Loading data from file %s into %s", file, table)
+                       primary_key: Optional[str] = None,
+                       loading_bar: Union[bool, str] = "auto",
+                       print_logs=True):
+        if print_logs:
+            logger.info("Loading data from file %s into %s", file, table)
         with self.db.engine.connect() as conn:
             with open(file, "r", encoding="utf-8") as f:
                 raw = json.load(f)
@@ -109,7 +112,7 @@ class BasicLoader:
                 schema = load_schema(file=file.with_suffix(".schema.json"),
                                      schema=schema)
                 if merge_with_file:
-                    load_schema(file=merge_with_file.replace(".json", ".schema.json") if merge_with_file else None,
+                    load_schema(file=merge_with_file.with_suffix(".schema.json") if merge_with_file else None,
                                 schema=schema)
 
             if type(fields) == str:
@@ -119,6 +122,11 @@ class BasicLoader:
                 for k in dict_root_key.split("."):
                     raw = raw[k]
             num = len(raw)
+            if type(loading_bar) == str:
+                if loading_bar == "auto":
+                    loading_bar = num > 3000
+            if loading_bar:
+                utils.activate_loading_bar(total=num, info=str(file))
             # iterate all items in file
             for item_id, item in raw.items():
                 data = {schema["key"][0]: schema["key"][1](item_id)}
@@ -175,9 +183,11 @@ class BasicLoader:
                         data[k] = data[k] if data[k] != 0 else None
                 self.save_localized_cache(conn)
                 self._insert_data(table, data, conn)
-                if num > 3000 and loaded % 100 == 0:
-                    utils.print_loading_bar(loaded / num)
+                if loading_bar and loaded % 100 == 0:
+                    utils.print_loading_bar(loaded)
                 loaded += 1
+            if loading_bar:
+                utils.clear_loading_bar()
             logger.info("Loaded %s rows into table %s from file %s", loaded, table, file)
             conn.commit()
 
@@ -185,7 +195,7 @@ class BasicLoader:
                            root_path: Path,
                            table: Type[models.Base],
                            regex: Optional[re.Pattern] = None,
-                           merge_with_file_path: Union[str, os.PathLike, None] = None,
+                           merge_with_file_path: Optional[Path] = None,
                            auto_schema=True,
                            schema: Optional[Dict[str, Tuple[str, Type]]] = None,
                            fields: Optional[str] = None,
@@ -194,7 +204,7 @@ class BasicLoader:
                            skip_existing=False,
                            primary_key: Optional[str] = None):
         directory = os.fsencode(root_path)
-        logger.info("Loading data from dir %s into %s", root_path, table)
+        logger.info("Loading data from dir %s into %s", root_path, table.__tablename__)
         count = 0
         if regex is None:
             regex = re.compile(r"\d+\.json")
@@ -211,23 +221,23 @@ class BasicLoader:
                 map(
                     lambda f: os.fsdecode(f),
                     os.listdir(directory)
-                )
-            )
-        )
+                )))
         num = len(file_list)
-        utils.print_loading_bar(0)
+        logger.info("Loading %s files from %s", num, root_path)
+        utils.activate_loading_bar(num)
         for filename in file_list:
             file_2 = None
-            if merge_with_file_path and os.path.exists(f"{merge_with_file_path}/{filename}"):
-                file_2 = f"{merge_with_file_path}/{filename}"
+            utils.print_loading_bar(count, info=str(root_path / filename))
+            if merge_with_file_path and os.path.exists(merge_with_file_path / filename):
+                file_2 = merge_with_file_path / filename
             self.load_dict_data(
                 file=root_path / filename, table=table.__tablename__, merge_with_file=file_2,
                 auto_schema=auto_schema,
                 schema=schema, fields=fields, default_values=default_values, localized=localized, skip=existing,
-                primary_key=primary_key
+                primary_key=primary_key, loading_bar=False, print_logs=False
             )
             count += 1
-            utils.print_loading_bar(count / num)
+        utils.clear_loading_bar()
         logger.info("Loaded %s files into %s from %s", count, table, root_path)
 
     def _insert_batch_data(self, table: str, value_field: str, batch: List[Dict[str, Any]],
@@ -286,7 +296,9 @@ class BasicLoader:
         files = list(filter(lambda f: re.match(r"\d+\.json", f), map(lambda f: os.fsdecode(f), os.listdir(directory))))
         num = len(files)
         logger.info("Loading language %s from %s files into the database from %s", lang, num, base_path / lang)
+        utils.activate_loading_bar(num)
         for filename in files:
+            utils.print_loading_bar(count, info=filename)
             self.load_simple_data(
                 file=base_path / lang / filename,
                 table="localised_strings",
@@ -294,8 +306,8 @@ class BasicLoader:
                 key_type=int, value_type=str, second_value_field=copy_to,
                 save_lang=(lang == "zh")
             )
-            utils.print_loading_bar(count / num)
             count += 1
+        utils.clear_loading_bar()
         logger.info("Loaded %s language files for language %s", count, lang)
 
     def get_next_loc_id(self):
@@ -383,7 +395,7 @@ class BasicLoader:
         logger.info("Saved %s rows into table %s from file %s", len(batch), table, file)
 
     def load_all_item_attributes(self,
-                                 root_path: Union[str, os.PathLike],
+                                 root_path: Path,
                                  table: str,
                                  columns: Tuple[str, str, str],
                                  regex: Optional[re.Pattern] = None
@@ -393,12 +405,19 @@ class BasicLoader:
         count = 0
         if regex is None:
             regex = re.compile(r"\d+\.json")
-        for file in os.listdir(directory):
-            filename = os.fsdecode(file)
-            if not re.match(regex, filename):
-                continue
-            self.load_item_attributes(file=f"{root_path}/{filename}", table=table, columns=columns)
+        file_list = list(
+            filter(
+                lambda fn: re.match(regex, fn),
+                map(
+                    lambda f: os.fsdecode(f),
+                    os.listdir(directory)
+                )))
+        utils.activate_loading_bar(len(file_list))
+        for filename in file_list:
+            utils.print_loading_bar(count, info=str(root_path / filename))
+            self.load_item_attributes(file=root_path / filename, table=table, columns=columns)
             count += 1
+        utils.clear_loading_bar()
         logger.info("Saved %s files from %s into %s", count, root_path, table)
 
     def init_item_mod(self, item_mod_data: Union[List[Union[str, Any]], Row[Tuple]], columns_order: List[str],
@@ -471,11 +490,13 @@ class BasicLoader:
             count = 0
             i = 0
             num = len(data)
+            utils.activate_loading_bar(num, info="Initializing item modifiers")
             for row in data:
                 count += self.init_item_mod(row, columns, conn)
                 i += 1
                 if i % 100 == 0:
-                    utils.print_loading_bar(i / num)
+                    utils.print_loading_bar(i)
+        utils.clear_loading_bar()
         logger.info("Inserted %s item modifiers into %s", count, models.ItemModifiers.__tablename__)
 
     def init_item_names(self):
@@ -488,6 +509,7 @@ class BasicLoader:
             errors = 0
             i = 0
             num = len(res)
+            utils.activate_loading_bar(num)
             logger.info("Updating %s item names", num)
             for item_id, name_en in res:
                 if name_en is None or len(name_en) > 64:
@@ -496,9 +518,10 @@ class BasicLoader:
                 stmt = update(models.Item).values(name=name_en).where(models.Item.id == item_id)
                 conn.execute(stmt)
                 if i % 100 == 0:
-                    utils.print_loading_bar(i / num)
+                    utils.print_loading_bar(i)
                 i += 1
             conn.commit()
+            utils.clear_loading_bar()
             logger.info("Updated %s item names, %s items where skipped", num, errors)
 
     def load_reprocess(self, file_path: Union[str, os.PathLike]):
