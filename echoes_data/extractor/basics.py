@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Dict, Any, Tuple, Type, Optional, List, Union, Set, TYPE_CHECKING
 
-from sqlalchemy import Table, insert, delete, select, Connection, Row
+from sqlalchemy import Table, insert, delete, select, Connection, Row, update
 
 from echoes_data import models, utils
 from echoes_data.exceptions import DataException
@@ -33,17 +33,7 @@ class BasicLoader:
         self.strings_en = {}  # type: Dict[int, str]
         self.strings = {}  # type: Dict[str, int]
         self.new_loc_cache = {}
-
-    @property
-    def engine(self):
-        return self.db.engine
-
-    @property
-    def dialect(self):
-        return self.db.dialect
-
-    def init_db(self):
-        tables = [
+        self.tables = [
             models.Region.__table__,
             models.Constellation.__table__,
             models.Solarsystem.__table__,
@@ -70,8 +60,22 @@ class BasicLoader:
             models.Blueprint.__table__,
             models.BlueprintCosts.__table__
         ]
-        logger.info("Setting up %s tables", len(tables))
-        for table in tables:  # type: Table
+
+    @property
+    def engine(self):
+        return self.db.engine
+
+    @property
+    def dialect(self):
+        return self.db.dialect
+
+    def drop_tables(self):
+        logger.warning("Dropping %s tables", len(self.tables))
+        models.Base.metadata.drop_all(bind=self.engine, checkfirst=True, tables=self.tables)
+
+    def init_db(self):
+        logger.info("Setting up %s tables", len(self.tables))
+        for table in self.tables:  # type: Table
             table.create(bind=self.db.engine, checkfirst=True)
 
     def _insert_data(self, table: str, data: Dict[str, Any], conn: Connection):
@@ -201,10 +205,18 @@ class BasicLoader:
                 res = conn.execute(stmt).fetchall()
             for t in res:
                 existing.add(t[0])
-        for file in os.listdir(directory):
-            filename = os.fsdecode(file)
-            if not re.match(regex, filename):
-                continue
+        file_list = list(
+            filter(
+                lambda fn: re.match(regex, fn),
+                map(
+                    lambda f: os.fsdecode(f),
+                    os.listdir(directory)
+                )
+            )
+        )
+        num = len(file_list)
+        utils.print_loading_bar(0)
+        for filename in file_list:
             file_2 = None
             if merge_with_file_path and os.path.exists(f"{merge_with_file_path}/{filename}"):
                 file_2 = f"{merge_with_file_path}/{filename}"
@@ -215,6 +227,7 @@ class BasicLoader:
                 primary_key=primary_key
             )
             count += 1
+            utils.print_loading_bar(count / num)
         logger.info("Loaded %s files into %s from %s", count, table, root_path)
 
     def _insert_batch_data(self, table: str, value_field: str, batch: List[Dict[str, Any]],
@@ -464,6 +477,29 @@ class BasicLoader:
                 if i % 100 == 0:
                     utils.print_loading_bar(i / num)
         logger.info("Inserted %s item modifiers into %s", count, models.ItemModifiers.__tablename__)
+
+    def init_item_names(self):
+        stmt = (
+            select(models.Item.id, models.LocalizedString.en)
+            .join(models.LocalizedString, models.Item.nameKey == models.LocalizedString.id)
+        )
+        with self.engine.connect() as conn:
+            res = conn.execute(stmt).fetchall()
+            errors = 0
+            i = 0
+            num = len(res)
+            logger.info("Updating %s item names", num)
+            for item_id, name_en in res:
+                if name_en is None or len(name_en) > 64:
+                    errors += 1
+                    continue
+                stmt = update(models.Item).values(name=name_en).where(models.Item.id == item_id)
+                conn.execute(stmt)
+                if i % 100 == 0:
+                    utils.print_loading_bar(i / num)
+                i += 1
+            conn.commit()
+            logger.info("Updated %s item names, %s items where skipped", num, errors)
 
     def load_reprocess(self, file_path: Union[str, os.PathLike]):
         logger.info("Loading reprocess data from %s", file_path)

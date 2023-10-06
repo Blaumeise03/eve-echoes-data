@@ -427,6 +427,7 @@ class Blueprint(Base):
         ForeignKey("items.id", name="key_blueprint_items_bp"), primary_key=True)
     productId: Mapped[int] = mapped_column(
         ForeignKey("items.id", name="key_blueprint_items_prod"), primary_key=True)
+    product: Mapped[Item] = relationship(foreign_keys=[productId])
     outputNum: Mapped[int] = mapped_column(Integer)
     skillLvl: Mapped[int] = mapped_column(Integer)
     materialAmendAtt: Mapped[int] = mapped_column(
@@ -437,6 +438,10 @@ class Blueprint(Base):
     timeAmendAtt: Mapped[int] = mapped_column(
         ForeignKey("attributes.id", name="key_blueprint_attributes_time"), primary_key=True)
     type: Mapped[int] = mapped_column(Integer)
+    resourceCosts: Mapped[List["BlueprintCosts"]] = relationship(back_populates="blueprint")
+
+    def __repr__(self):
+        return f"Blueprint({self.blueprintId})"
 
 
 class CostType(enum.Enum):
@@ -459,10 +464,15 @@ class BlueprintCosts(Base):
     __tablename__ = "blueprint_costs"
     blueprintId: Mapped[int] = mapped_column(
         ForeignKey("blueprints.blueprintId", name="key_blueprintcost_bp"), primary_key=True)
+    blueprint: Mapped[Blueprint] = relationship(back_populates="resourceCosts")
     resourceId: Mapped[int] = mapped_column(
         ForeignKey("items.id", name="key_blueprintcost_item"), primary_key=True)
+    resource: Mapped[Item] = relationship(foreign_keys=[resourceId], lazy="joined")
     amount: Mapped[int] = mapped_column(Integer)
     type: Mapped[int] = mapped_column(Enum(CostType), nullable=True)
+
+    def __repr__(self):
+        return f"BpCost({self.amount}x {self.resource.name})"
 
 
 class Richness(enum.Enum):

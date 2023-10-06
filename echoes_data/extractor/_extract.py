@@ -198,7 +198,6 @@ class EchoesExtractor:
     def __init__(self, db: EchoesDB, paths: PathLibrary):
         self.db = db
         self.basic_loader = basics.BasicLoader(db)
-        self.basic_loader.init_db()
         self.uni_loader = universe.UniverseLoader(self.basic_loader)
         self.path_library = paths
 
@@ -298,6 +297,8 @@ class EchoesExtractor:
             },
             fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
         )
+
+        self.basic_loader.init_item_names()
 
         self.basic_loader.load_dict_data(
             file=self.path_library.path_item_nanocore, table=models.ItemNanocore.__tablename__,

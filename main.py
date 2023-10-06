@@ -40,6 +40,8 @@ if __name__ == '__main__':
                         help="The database dialect, only sqlite and mysql are supported")
     parser.add_argument("--only_list_files", action="store_true",
                         help="Instead of extracting the data, a list of all required files will get printed")
+    parser.add_argument("-d", "--drop", action="store_true",
+                        help="Drops all tables before reloading the data (doesn't affect third-party tables)")
 
     args = parser.parse_args()
     just_fix_windows_console()
@@ -67,4 +69,7 @@ if __name__ == '__main__':
 
     db = EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
     data_extractor = EchoesExtractor(db, path_library)
+    if args.drop:
+        data_extractor.basic_loader.drop_tables()
+    data_extractor.basic_loader.init_db()
     data_extractor.extract_data(args.mode)
