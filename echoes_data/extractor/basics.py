@@ -49,6 +49,7 @@ class BasicLoader:
             models.Solarsystem.__table__,
             models.SystemConnections,
             models.Celestial.__table__,
+            models.StargateConnections,
             models.Unit.__table__,
             models.LocalizedString.__table__,
             models.Attribute.__table__,

@@ -56,6 +56,7 @@ class Solarsystem(Base):
     __tablename__ = "solarsystems"
     id: Mapped[int] = mapped_column(primary_key=True)
     region_id = mapped_column(ForeignKey("regions.id", name="key_sys_reg"))
+    region: Mapped[Region] = relationship()
     constellation_id = mapped_column(ForeignKey("constellations.id", name="key_sys_const", ondelete="CASCADE"))
     constellation: Mapped[Constellation] = relationship(back_populates="systems")
     name: Mapped[str] = mapped_column(String(30), index=True, nullable=True)
@@ -86,8 +87,11 @@ class Solarsystem(Base):
 
 StargateConnections = Table(
     "stargates", Base.metadata,
-    Column("origin", Integer, ForeignKey("celestials.id", name="key_gates_origin", ondelete="CASCADE")),
-    Column("destination", Integer, ForeignKey("celestials.id", name="key_gates_destination", ondelete="CASCADE")))
+    Column("from_gate_id", ForeignKey("celestials.id", name="key_gates_from", ondelete="CASCADE")),
+    Column("to_gate_id", ForeignKey("celestials.id", name="key_gates_to", ondelete="CASCADE")),
+    Column("from_sys_id", ForeignKey("solarsystems.id", name="key_gates_sys_from", ondelete="CASCADE")),
+    Column("to_sys_id", ForeignKey("solarsystems.id", name="key_gates_sys_to", ondelete="CASCADE"))
+)
 
 
 class Celestial(Base):
@@ -158,7 +162,7 @@ class Celestial(Base):
 
     __tablename__ = "celestials"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(64), nullable=True)
     type_id: Mapped[int] = mapped_column(Integer, nullable=True)
     group_id: Mapped[int] = mapped_column(Integer, nullable=True)
     system_id = mapped_column(ForeignKey("solarsystems.id", name="key_celest_sys", ondelete="CASCADE"))

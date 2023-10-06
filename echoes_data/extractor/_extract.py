@@ -126,6 +126,10 @@ class PathLibrary:
         return self.root_path / "sigmadata" / "eve" / "universe" / "celestials.json"
 
     @property
+    def path_stargates(self):
+        return self.root_path / "sigmadata" / "eve" / "universe" / "stargates.json"
+
+    @property
     def path_planet_exploit(self):
         return self.root_path / "manual_staticdata" / "universe" / "planet_exploit_resource.json"
 
@@ -411,7 +415,7 @@ class EchoesExtractor:
             table="constellations",
             columns=["id", "name", "x", "y", "z", "faction_id", "radius", "wormhole_class_id"])
 
-        systems = self.uni_loader.load_data(
+        solarsystems = self.uni_loader.load_data(
             file_path=self.path_library.path_solar_systems,
             table="solarsystems",
             columns=["id", "name", "x", "y", "z", "security", "faction_id", "radius", "region_id", "constellation_id"],
@@ -426,8 +430,7 @@ class EchoesExtractor:
                      # Compatible
                      ("type_id", lambda cel: self.uni_loader.type_to_short_id[cel["type_id"]]),
                      ("group_id", lambda cel: self.uni_loader.type_to_group_id[cel["type_id"]]),
-                     ("system_id", "solar_system_id"), "orbit_id", "x", "y", "z", "radius",
-                     "celestial_index", "orbit_index"],
+                     ("system_id", "solar_system_id"), "x", "y", "z", "radius"],
             name_func=self.uni_loader.get_celestial_name,
             cache_celestials=True)
 
@@ -441,6 +444,21 @@ class EchoesExtractor:
                      "celestial_index", "orbit_index"],
             name_func=self.uni_loader.get_celestial_name,
             cache_celestials=True, loading_bar=True)
+
+        stargates = self.uni_loader.load_data(
+            file_path=self.path_library.path_stargates,
+            table="celestials",
+            columns=["id",
+                     ("type_id", lambda cel: self.uni_loader.type_to_short_id[cel["type_id"]]),
+                     ("group_id", lambda cel: self.uni_loader.type_to_group_id[cel["type_id"]]),
+                     ("system_id", "from_solar_system_id"), "x", "y", "z"],
+            cache_celestials=True, loading_bar=True, return_raw=True)
+        self.uni_loader.load_stargates_connections(stargates)
+        del stargates
+
+    @BaseExtractor.extractor(name="cobalt", requires="universe")
+    def load_map(self):
+        self.uni_loader.init_cobalt_edge()
 
     @BaseExtractor.extractor(name="planet_exploit", requires=["universe", "items"])
     def load_pi(self):
