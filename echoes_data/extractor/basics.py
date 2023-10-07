@@ -9,6 +9,7 @@ from sqlalchemy import Table, insert, delete, select, Connection, Row, update
 
 from echoes_data import models, utils
 from echoes_data.exceptions import DataException
+from echoes_data.models import CostType
 from echoes_data.utils import load_schema
 
 if TYPE_CHECKING:
@@ -568,14 +569,14 @@ class BasicLoader:
         b = 0
         c = 0
         species = {
-            "module_species": "mod",
-            "planetary_material_species": "pi",
-            "minerals_species": "mins",
-            "ship_species": "ship",
-            "component_species": "comp",
-            "blueprint_species": "bp",
-            "datacore_species": "data",
-            "salvage_material_species": "salv"
+            "module_species": CostType.module,
+            "planetary_material_species": CostType.pi,
+            "minerals_species": CostType.minerals,
+            "ship_species": CostType.ship,
+            "component_species": CostType.component,
+            "blueprint_species": CostType.blueprint,
+            "datacore_species": CostType.datacore,
+            "salvage_material_species": CostType.salvage
         }
         re_species = re.compile(r"[a-zA-z_]+_species")
         with self.db.engine.connect() as conn:
@@ -600,10 +601,11 @@ class BasicLoader:
                 b += 1
                 for mat_id, quantity in bp_data["material"].items():  # type: str, int
                     mat_type = None
+                    mat_id = int(mat_id)  # type: int
                     for k in bp_data:
                         if re_species.match(k):
                             if mat_id in bp_data[k]:
-                                mat_type = species[k]
+                                mat_type = species[k].name
                     conn.execute(stmt_cost, {
                         "blueprintId": bp_id,
                         "resourceId": int(mat_id),

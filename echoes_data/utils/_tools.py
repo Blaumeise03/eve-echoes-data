@@ -1,6 +1,8 @@
+import functools
 import json
 import os
-from typing import Type, Optional, Dict, Tuple, Union
+import typing
+from typing import Type, Optional, Dict, Tuple, Union, Callable
 
 
 def decapitalize(s, upper_rest=False):

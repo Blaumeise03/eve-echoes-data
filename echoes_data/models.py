@@ -425,9 +425,10 @@ class Blueprint(Base):
     __tablename__ = "blueprints"
     blueprintId: Mapped[int] = mapped_column(
         ForeignKey("items.id", name="key_blueprint_items_bp"), primary_key=True)
+    blueprintItem: Mapped[Item] = relationship(foreign_keys=[blueprintId], lazy="joined")
     productId: Mapped[int] = mapped_column(
         ForeignKey("items.id", name="key_blueprint_items_prod"), primary_key=True)
-    product: Mapped[Item] = relationship(foreign_keys=[productId])
+    product: Mapped[Item] = relationship(foreign_keys=[productId], lazy="joined")
     outputNum: Mapped[int] = mapped_column(Integer)
     skillLvl: Mapped[int] = mapped_column(Integer)
     materialAmendAtt: Mapped[int] = mapped_column(
@@ -438,24 +439,26 @@ class Blueprint(Base):
     timeAmendAtt: Mapped[int] = mapped_column(
         ForeignKey("attributes.id", name="key_blueprint_attributes_time"), primary_key=True)
     type: Mapped[int] = mapped_column(Integer)
-    resourceCosts: Mapped[List["BlueprintCosts"]] = relationship(back_populates="blueprint")
+    resourceCosts: Mapped[List["BlueprintCosts"]] = relationship(back_populates="blueprint", lazy="joined")
 
     def __repr__(self):
         return f"Blueprint({self.blueprintId})"
 
 
 class CostType(enum.Enum):
-    pi = "pi"
-    minerals = "minerals"
-    component = "component"
-    module = "module"
-    salvage = "salvage"
-    ship = "ship"
+    pi = 0
+    minerals = 1
+    component = 2
+    module = 3
+    salvage = 4
+    ship = 5
+    blueprint = 6
+    datacore = 7
 
     @staticmethod
     def from_str(label: str):
         for p_type in CostType:
-            if p_type.value.casefold() == label.casefold():
+            if p_type.name.casefold() == label.casefold():
                 return p_type
         return None
 
@@ -469,7 +472,7 @@ class BlueprintCosts(Base):
         ForeignKey("items.id", name="key_blueprintcost_item"), primary_key=True)
     resource: Mapped[Item] = relationship(foreign_keys=[resourceId], lazy="joined")
     amount: Mapped[int] = mapped_column(Integer)
-    type: Mapped[int] = mapped_column(Enum(CostType), nullable=True)
+    type: Mapped[CostType] = mapped_column(Enum(CostType), nullable=True)
 
     def __repr__(self):
         return f"BpCost({self.amount}x {self.resource.name})"

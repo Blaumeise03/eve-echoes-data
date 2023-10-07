@@ -220,7 +220,7 @@ class EchoesExtractor:
             self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang=lang)
         self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang="zh", copy_to="source")
 
-    @BaseExtractor.extractor(name="lang_cache")
+    @BaseExtractor.extractor(name="lang_cache", requires="lang")
     def load_localized_cache(self):
         self.basic_loader.load_localized_cache()
 
