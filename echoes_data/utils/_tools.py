@@ -19,6 +19,8 @@ def to_type(string: str) -> Type:
             return str
         case "int":
             return int
+        case "long":
+            return int
         case "bool":
             return bool
         case "float":

@@ -195,11 +195,12 @@ class BaseExtractor:
 
 
 class EchoesExtractor:
-    def __init__(self, db: EchoesDB, paths: PathLibrary):
+    def __init__(self, db: EchoesDB, paths: PathLibrary, force=False):
         self.db = db
         self.basic_loader = basics.BasicLoader(db)
         self.uni_loader = universe.UniverseLoader(self.basic_loader)
         self.path_library = paths
+        self.force = force
 
     def extract_data(self, scopes: List[str]):
         order = BaseExtractor.find_order(scopes)
@@ -274,7 +275,10 @@ class EchoesExtractor:
         # ToDo: find preSkill, maybe exp? not sure about this one
 
         self.basic_loader.load_all_dict_data(
-            root_path=self.path_library.path_items_root, table=models.Item, skip_existing=True, primary_key="id",
+            root_path=self.path_library.path_items_root,
+            table=models.Item,
+            skip_existing=not self.force,
+            primary_key="id",
             merge_with_file_path=self.path_library.path_items_dogma_root,
             schema={
                 "zh_desc": ("sourceDesc", str),

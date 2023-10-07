@@ -34,6 +34,7 @@ class ExtractionTest(unittest.TestCase):
         cls.db = EchoesDB(cls.engine, dialect=Dialect.sqlite)
         cls.paths = PathLibrary(Path("resources/example_staticdata"))
         cls.data_extractor = EchoesExtractor(cls.db, cls.paths)
+        cls.data_extractor.basic_loader.init_db()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -57,6 +58,14 @@ class ExtractionTest(unittest.TestCase):
         self.data_extractor.load_localized_cache()
         self.assertEqual(10, len(self.data_extractor.basic_loader.strings), "Strings cache is invalid")
         self.assertEqual(10, len(self.data_extractor.basic_loader.strings_en), "Strings_en cache is invalid")
+
+    def test_3_complex_string(self):
+        self.assertEqual(
+            "Group 1 en Test string A en",
+            self.data_extractor.basic_loader.get_complex_string("{module_affix:Group 1 zh} {module:Test string A zh}"))
+        self.assertEqual(
+            "Group 1 en ab Test string A en",
+            self.data_extractor.basic_loader.get_complex_string("{module_affix:Group 1 zh} ab {module:Test string A zh}"))
 
     def test_3_load_basics(self):
         self.data_extractor.load_basics()

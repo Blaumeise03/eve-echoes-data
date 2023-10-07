@@ -7,12 +7,14 @@ from typing import List, Optional
 import sqlalchemy
 # noinspection PyUnresolvedReferences
 from colorama import just_fix_windows_console
-from sqlalchemy import log as sqlalchemy_log
+from sqlalchemy import log as sqlalchemy_log, select, text
 
+from echoes_data import models, utils
 from echoes_data.data import Blueprint
 from echoes_data.database import EchoesDB
 from echoes_data.exceptions import DataNotFoundException
 from echoes_data.utils import Dialect
+from echoes_data.utils._console import LoadingConsole
 
 sqlalchemy_log._add_default_handler = lambda x: None  # Patch to avoid duplicate logging
 
@@ -84,18 +86,76 @@ def start_bp_menu():
                 msg += f"  + {price:>14,.0f} ISK"
         isk += blueprint.money
         msg += f"\n    {blueprint.name:<{max_l}}:  1  + {blueprint.money:>14,.0f} ISK"
-        msg += f"\n    {'':<{max_l}}        {'='*14}===="
+        msg += f"\n    {'':<{max_l}}        {'=' * 14}===="
         msg += f"\n    {'':<{max_l}}        {isk:>14,.0f} ISK"
         print(msg)
+
+
+def start_csv_menu():
+    print("Please enter what you want to export: blueprints")
+    sel = get_input("What do you want to export?", ["blueprints"])
+    if sel == "blueprints":
+        print("Please prepare a file containing all resources that should get exported. The resources should be "
+              "separated by a tabulator or a line break.")
+        raw = input("Header file: ")
+        resources = []
+        with open(raw, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+        for line in lines:
+            resources.extend(map(lambda s: s.strip(), line.strip(" \n").split("\t")))
+        print(f"Found {len(resources)} resources in header file")
+        resource_ids = []
+        stmt = select(models.Item.name, models.Item.id).where(models.Item.name.in_(resources))
+        with engine.connect() as conn:
+            res = conn.execute(stmt).fetchall()
+            for wanted in resources:
+                found = False
+                for r_n, r_i in res:
+                    if r_n == wanted:
+                        resource_ids.append(r_i)
+                        found = True
+                        break
+                if found:
+                    continue
+                print("Resource not found: " + wanted)
+                return
+
+        sql = "SELECT item.name"
+
+        def _get_subquery(r_name: str, r_id: int):
+            return (",\n       (SELECT bc.amount\n"
+                    "        FROM blueprint_costs as bc\n"
+                    "                 JOIN items i on bc.resourceId = i.id\n"
+                    f"        WHERE i.id={r_id}\n"
+                    f"          AND bc.blueprintId = bp.blueprintId) AS '{r_name}'")
+        for res_name, res_id in zip(resources, resource_ids):
+            sql += _get_subquery(res_name, res_id)
+        sql += ("\nFROM blueprints as bp\n"
+                "         JOIN items item on bp.productId = item.id"
+                )
+        print("Loading data")
+        with engine.connect() as conn:
+            res = conn.execute(text(sql)).fetchall()
+        print(f"Loaded {len(res)} rows, writing to csv file...")
+        with open("staticdata/blueprints.csv", "w", encoding="utf-8") as csv:
+            csv.write("Product,")
+            csv.write(",".join(resources))
+            csv.write("\n")
+            for row in res:
+                csv.write(",".join([str(col) if col is not None else "0" for col in row]))
+                csv.write("\n")
+        print("File exported, saved as staticdata/blueprints.csv")
+        return
 
 
 def start_menu():
     print("====== Echoes Data CLI ======")
     print("Available Modes:")
-    print("   bp - Get blueprint data")
+    print("   bp  - Get blueprint data")
+    print("   csv - CSV export tools")
     print("=============================")
     while True:
-        mode = get_input("Please select a mode", ["bp", "exit"])
+        mode = get_input("Please select a mode", ["bp", "csv", "exit"])
         match mode:
             case "quit":
                 print("Good bye")
@@ -103,6 +163,8 @@ def start_menu():
                 exit(0)
             case "bp":
                 start_bp_menu()
+            case "csv":
+                start_csv_menu()
 
 
 if __name__ == '__main__':

@@ -28,6 +28,8 @@ if __name__ == '__main__':
                         help="Instead of extracting the data, a list of all required files will get printed")
     parser.add_argument("-d", "--drop", action="store_true",
                         help="Drops all tables before reloading the data (doesn't affect third-party tables)")
+    parser.add_argument("-f", "--force_replace", action="store_true",
+                        help="Forces the refresh of the data and does not skip any already existing data")
 
     args = parser.parse_args()
 
@@ -65,7 +67,7 @@ if __name__ == '__main__':
                                       pool_recycle=True)
 
     db = EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
-    data_extractor = EchoesExtractor(db, path_library)
+    data_extractor = EchoesExtractor(db, path_library, force=args.force_replace)
     if args.drop:
         data_extractor.basic_loader.drop_tables()
     data_extractor.basic_loader.init_db()
