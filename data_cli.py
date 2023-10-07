@@ -9,12 +9,11 @@ import sqlalchemy
 from colorama import just_fix_windows_console
 from sqlalchemy import log as sqlalchemy_log, select, text
 
-from echoes_data import models, utils
+from echoes_data import models
 from echoes_data.data import Blueprint
 from echoes_data.database import EchoesDB
 from echoes_data.exceptions import DataNotFoundException
 from echoes_data.utils import Dialect
-from echoes_data.utils._console import LoadingConsole
 
 sqlalchemy_log._add_default_handler = lambda x: None  # Patch to avoid duplicate logging
 
@@ -131,16 +130,27 @@ def start_csv_menu():
         for res_name, res_id in zip(resources, resource_ids):
             sql += _get_subquery(res_name, res_id)
         sql += ("\nFROM blueprints as bp\n"
-                "         JOIN items item on bp.productId = item.id"
+                "         JOIN items item on bp.productId = item.id\nORDER BY item.name"
                 )
         print("Loading data")
         with engine.connect() as conn:
             res = conn.execute(text(sql)).fetchall()
         print(f"Loaded {len(res)} rows, writing to csv file...")
-        with open("staticdata/blueprints.csv", "w", encoding="utf-8") as csv:
+        with open("staticdata/blueprints_cost.csv", "w", encoding="utf-8") as csv:
             csv.write("Product,")
             csv.write(",".join(resources))
             csv.write("\n")
+            for row in res:
+                csv.write(",".join([str(col) if col is not None else "0" for col in row]))
+                csv.write("\n")
+        print("File exported, saved as staticdata/blueprints_cost.csv")
+        print("Preparing basic blueprint export...")
+        with engine.connect() as conn:
+            stmt = text("SELECT item.name, bp.outputNum, bp.money "
+                        "FROM blueprints as bp JOIN items item on bp.productId = item.id ORDER BY item.name")
+            res = conn.execute(stmt).fetchall()
+        with open("staticdata/blueprints.csv", "w", encoding="utf-8") as csv:
+            csv.write("Product,OutputNum,Money\n")
             for row in res:
                 csv.write(",".join([str(col) if col is not None else "0" for col in row]))
                 csv.write("\n")

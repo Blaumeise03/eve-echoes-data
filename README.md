@@ -22,7 +22,8 @@ Items/module data:
     items (all items from the game)
     attributes, item_attributes, item_effects, item_nanocores, 
     effects,
-    modifier_definition, modifier_value, item_modifiers
+    modifier_definition, modifier_value, item_modifiers,
+    blueprints, blueprint_cost
 General data:
     unit (al units from the game, e.g. m/s, kg, ...)
     categories, groups, types
@@ -31,8 +32,8 @@ Universe data:
     regions
     constellations
     solarsystems
-    system_connections (does not include cobalt edge yet)
-    celestials (only "normal" celestials; stargates & NPC stations WIP)
+    system_connections
+    celestials (only "normal" celestials and stargates;  NPC stations are WIP)
     plane_exploit (planetary production)
 ```
 
@@ -53,21 +54,39 @@ eve-echoes-data/ (this folder name doesn't matter)
             dogma/*
 ```
 Please launch the script with `python main.py -m <one or more modes>`, these are the available modes:
-```python
-["lang", "items", "item_extra", "item_attrs", "bps", "base", "modifier", "universe", "planet_exploit"]
+```
+lang:   Loads language files
+base:   Loads basic stuff like groups and categories
+attrs:  Loads attributes
+items:  Loads items
+item_extra: Loads extra data for items, like reprocessing data and repackaging volume
+bps:        Loads manufacturing blueprints (Reverse Engineerin BPs are WIP)
+item_attrs: Loads attributes of items
+modifier:   Loads modifier data
+universe:   Loads universe data (regions, systems,...)
+cobalt:     Initilaizes the system connections in Cobalt Edge
+planet_exploit: Loads planetary production data
 ```
 e.g.
 ```shell
-python main.py -m items lang base universe planet_exploit
+python extract_data.py -m items lang base universe planet_exploit
 ```
 This will export the data into a sqlite3 database by default. You can specify another database via the `-db <url>` and
 `--dialect <sqlite|mysql>` argument. For example:
 ```shell
-python main.py -db "mariadb+mariadbconnector://user:password@localhost:3306/database" --dialect mysql
+python extract_data.py -db "mariadb+mariadbconnector://user:password@localhost:3306/database" --dialect mysql
 
-python main.py -db "sqlite+pysqlite:///echoes.db" --dialect sqlite
+python extract_data.py -db "sqlite+pysqlite:///echoes.db" --dialect sqlite
 ```
 Please make sure to install the required dependencies for your database, e.g. `mariadb` if you want to use a MariaDB
 database.
+You can also force the database to get dropped before reloading, to ensure that no wrong data gets persisted. To do
+so, append the `--drop` parameter.
 
 You can find useful SQL commands in [useful_sql_cmds.md](useful_sql_cmds.md).
+
+## Command Line Interface
+There is also a WIP CLI, that can get used to access the data, e.g:
+```shell
+python data_cli.py -db "sqlite+pysqlite:///echoes.db" --dialect sqlite
+```
