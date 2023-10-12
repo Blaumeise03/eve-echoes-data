@@ -50,6 +50,7 @@ class BasicLoader:
             models.Type.__table__,
             models.Item.__table__,
             models.ItemNanocore.__table__,
+            models.CorpTaskItem.__table__,
             models.ItemAttribute.__table__,
             models.ItemEffects.__table__,
             models.PlanetExploit.__table__,

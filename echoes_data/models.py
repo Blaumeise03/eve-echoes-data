@@ -351,6 +351,17 @@ class ItemNanocore(Base):
     trainableModifierItems: Mapped[str] = mapped_column(Text())
 
 
+class CorpTaskItem(Base):
+    __tablename__ = "corp_task_items"
+    itemId: Mapped[int] = mapped_column(
+        ForeignKey("items.id", name="key_corptask_item"), primary_key=True)
+    fpReward: Mapped[int] = mapped_column(Integer)
+    maxPerWeek: Mapped[int] = mapped_column(Integer)
+    purchaseNum: Mapped[int] = mapped_column(Integer)
+    randomGroup: Mapped[int] = mapped_column(Integer)
+    weekTimes: Mapped[int] = mapped_column(Integer)
+
+
 class ItemAttribute(Base):
     __tablename__ = "item_attributes"
     itemId: Mapped[int] = mapped_column(

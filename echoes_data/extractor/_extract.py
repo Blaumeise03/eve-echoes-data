@@ -1,4 +1,3 @@
-import functools
 import logging
 import os.path
 import re
@@ -132,6 +131,10 @@ class PathLibrary:
     @property
     def path_planet_exploit(self):
         return self.root_path / "manual_staticdata" / "universe" / "planet_exploit_resource.json"
+
+    @property
+    def path_corp_tech(self):
+        return self.root_path / "py_data" / "data_common" / "static" / "corp_tech_skill.json"
 
 
 class BaseExtractor:
@@ -468,3 +471,20 @@ class EchoesExtractor:
     @BaseExtractor.extractor(name="planet_exploit", requires=["universe", "items"])
     def load_pi(self):
         self.uni_loader.load_planetary_production(file_path=self.path_library.path_planet_exploit)
+
+    @BaseExtractor.extractor(name="corp_tech", requires=["items"])
+    def load_corp_tech(self):
+        self.basic_loader.load_dict_data(
+            file=self.path_library.path_corp_tech,
+            dict_root_key="data.corp_task_item",
+            table=models.CorpTaskItem.__tablename__,
+            schema={
+                "key": ("itemId", int),
+                "fp_reward": ("fpReward", int),
+                "max_per_week": ("maxPerWeek", int),
+                "purchase_num": ("purchaseNum", int),
+                "random_group": ("randomGroup", int),
+                "week_times": ("weekTimes", int),
+            },
+            fields="itemId,fpReward,maxPerWeek,purchaseNum,randomGroup,weekTimes"
+        )
