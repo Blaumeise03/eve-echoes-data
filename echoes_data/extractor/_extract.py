@@ -488,3 +488,6 @@ class EchoesExtractor:
             },
             fields="itemId,fpReward,maxPerWeek,purchaseNum,randomGroup,weekTimes"
         )
+        self.basic_loader.load_corp_tech(
+            file=self.path_library.path_corp_tech,
+        )

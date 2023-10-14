@@ -60,7 +60,9 @@ class BasicLoader:
             models.RepackageVolume.__table__,
             models.Reprocess.__table__,
             models.Blueprint.__table__,
-            models.BlueprintCosts.__table__
+            models.BlueprintCosts.__table__,
+            models.CorpTech.__table__,
+            models.CorpTechLevel.__table__
         ]
 
     @property
@@ -616,3 +618,41 @@ class BasicLoader:
                     c += 1
             conn.commit()
         logger.info("Inserted %s blueprints with %s costs into blueprints and blueprint_cost", b, c)
+
+    def load_corp_tech(self, file: Path):
+        with open(file, "r", encoding="utf-8") as file:
+            raw = json.load(file)
+        corp_tech_list = raw["data"]["corp_tech_list"]  # type: Dict[str, Any]
+        base_stmt = self.db.dialect.upsert(
+            models.CorpTech.__tablename__,
+            ["id", "corp_lv_require", "max_lv", "source_desc", "source_name", "ui_pos", "desc_key", "name_key"])
+        lvl_stmt = self.db.dialect.upsert(
+            models.CorpTechLevel.__tablename__,
+            ["tech_id", "tech_lvl", "fp_require", "isk_require", "online_cal_code"]
+        )
+        with self.db.engine.connect() as conn:
+            for tech_id, tech in corp_tech_list.items():
+                tech_id = int(tech_id)  # type: int
+                desc_key = self.get_localized_id(tech["tech_desc"], save_new=True)
+                name_key = self.get_localized_id(tech["tech_name"], save_new=True)
+                conn.execute(base_stmt, {
+                    "id": tech_id,
+                    "corp_lv_require": tech["corp_lv_require"],
+                    "max_lv": tech["max_lv"],
+                    "source_desc": tech["tech_desc"],
+                    "source_name": tech["tech_name"],
+                    "ui_pos": tech["ui_pos"],
+                    "desc_key": desc_key,
+                    "name_key": name_key
+                })
+                for i, cal_code in enumerate(tech["online_cal_code"]):
+                    fp = tech["fp_require"][i]
+                    isk = tech["isk_require"][i]
+                    conn.execute(lvl_stmt, {
+                        "tech_id": tech_id,
+                        "tech_lvl": i + 1,
+                        "fp_require": fp,
+                        "isk_require": isk,
+                        "online_cal_code": cal_code
+                    })
+            conn.commit()

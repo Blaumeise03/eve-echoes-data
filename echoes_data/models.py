@@ -519,3 +519,26 @@ class PlanetExploit(Base):
 
     def __repr__(self) -> str:
         return f"PlanetExploit(planet={self.planet_id}, res={self.type_id})"
+
+
+class CorpTech(Base):
+    __tablename__ = "corp_tech"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    corp_lv_require: Mapped[int] = mapped_column(Integer)
+    max_lv: Mapped[int] = mapped_column(Integer)
+    source_desc: Mapped[str] = mapped_column(String(64))
+    desc_key: Mapped[int] = mapped_column(
+        ForeignKey("localised_strings.id", name="key_corptech_loc_desc"), nullable=True)
+    source_name: Mapped[str] = mapped_column(String(32))
+    name_key: Mapped[int] = mapped_column(
+        ForeignKey("localised_strings.id", name="key_corptech_loc_name"), nullable=True)
+    ui_pos: Mapped[int] = mapped_column(Integer)
+
+
+class CorpTechLevel(Base):
+    __tablename__ = "corp_tech_level"
+    tech_id: Mapped[int] = mapped_column(ForeignKey("corp_tech.id", name="key_level_corptech"), primary_key=True)
+    tech_lvl: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fp_require: Mapped[int] = mapped_column(Integer)
+    isk_require: Mapped[int] = mapped_column(BigInteger)
+    online_cal_code: Mapped[str] = mapped_column(String(64))
