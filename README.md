@@ -10,8 +10,8 @@ This tool is designed to export static data from the game. This tool does NOT de
 apk has to be already extracted/decompiled. To do so, use [xforce/eve-echoes-tools](https://github.com/xforce/eve-echoes-tools).
 The data gets exported into a sqlite3 database called `echoes.db`.
 
-> At the moment of writing, `xforce/eve-echoes-tools` is broken. Please use my forks of [eve-echoes-tools](https://github.com/blaumeis03/eve-echoes-tools)
-> **AND** [neox-tools](https://github.com/blaumeis03/neox-tools) (it is crucial to use the lates version of neox-tools, the old one is broken).
+> At the moment of writing, `xforce/eve-echoes-tools` is broken. Please use my forks of [eve-echoes-tools](https://github.com/blaumeise03/eve-echoes-tools)
+> **AND** [neox-tools](https://github.com/blaumeise03/neox-tools) (it is crucial to use the lates version of neox-tools, the old one is broken).
 >
 > The `eve-echoes-tools` also contains detailed installation and usage instruction.
 
