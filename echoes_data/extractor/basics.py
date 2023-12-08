@@ -355,12 +355,45 @@ class BasicLoader:
         self.strings[zh_name] = res[0]
         return res[0]
 
-    def get_localized_string(self, zh_name: str, return_def=True):
+    def get_complex_string(self, source_string: str):
+        # {drone_affix:攻击型 } {drone:渗透者}
+        # {module_affix:蝠鲼} {module:重型采掘者无人机}
+        # {skill_name:进阶护盾强化阵列理论} {skill_level:等级1}
+        # {item_name:专家舰载机防御理论} {blueprint:蓝图}
+        # {ship:刽子手级}{skin:白刃}{skin_duration:涂装(永久)}
+        re_str = re.compile(r"\{([a-z_]+):([^}]+)}")
+        matches = list(re_str.finditer(source_string))
+        if len(matches) == 0:
+            return None
+        last_end = None
+        result = ""
+        for match in matches:
+            if last_end is not None:
+                result += source_string[last_end:match.start()]
+            last_end = match.end()
+            placeholder_type = match.group(1)
+            placeholder_key = match.group(2)
+            r = self.get_localized_string(zh_name=placeholder_key, return_def=False, check_complex=False)
+            if r is None:
+                return None
+            result += r
+        return result
+
+    def get_localized_string(self, zh_name: str, return_def=True, check_complex=True):
         if zh_name not in self.strings:
+            if check_complex:
+                en = self.get_complex_string(zh_name)
+                if en is not None:
+                    return en
             if return_def:
                 return zh_name
             return None
-        return self.strings_en[self.strings[zh_name]]
+        i = self.strings[zh_name]
+        if i in self.strings_en:
+            return self.strings_en[self.strings[zh_name]]
+        if return_def:
+            return zh_name
+        return None
 
     def load_localized_cache(self):
         with self.db.engine.connect() as conn:
@@ -505,8 +538,8 @@ class BasicLoader:
 
     def init_item_names(self):
         stmt = (
-            select(models.Item.id, models.LocalizedString.en)
-            .join(models.LocalizedString, models.Item.nameKey == models.LocalizedString.id)
+            select(models.Item.id, models.LocalizedString.en, models.Item.sourceName)
+            .join(models.LocalizedString, models.Item.nameKey == models.LocalizedString.id, isouter=True)
         )
         with self.engine.connect() as conn:
             res = conn.execute(stmt).fetchall()
@@ -515,7 +548,9 @@ class BasicLoader:
             num = len(res)
             utils.activate_loading_bar(num)
             logger.info("Updating %s item names", num)
-            for item_id, name_en in res:
+            for item_id, name_en, source_name in res:
+                if name_en is None:
+                    name_en = self.get_localized_string(source_name)
                 if name_en is None or len(name_en) > 64:
                     errors += 1
                     continue
@@ -635,6 +670,7 @@ class BasicLoader:
                 tech_id = int(tech_id)  # type: int
                 desc_key = self.get_localized_id(tech["tech_desc"], save_new=True)
                 name_key = self.get_localized_id(tech["tech_name"], save_new=True)
+                self.save_localized_cache(conn)
                 conn.execute(base_stmt, {
                     "id": tech_id,
                     "corp_lv_require": tech["corp_lv_require"],
