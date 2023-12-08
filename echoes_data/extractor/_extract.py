@@ -243,11 +243,15 @@ class EchoesExtractor:
             default_values={"groupIds": "[]"},
             fields="id,groupIds,localisedNameIndex,sourceName"
         )
-        self.uni_loader.load_item_types(
-            path_item_type=self.path_library.path_item_type,
-            path_item_types_by_group=self.path_library.path_item_types_by_group,
-            path_type_id_mapping=self.path_library.path_type_id_mapping
-        )
+        if not self.path_library.path_item_type.exists():
+            logger.error("File %s not found", self.path_library.path_item_type)
+            logger.error("This might cause an error if the data is not already loaded")
+        else:
+            self.uni_loader.load_item_types(
+                path_item_type=self.path_library.path_item_type,
+                path_item_types_by_group=self.path_library.path_item_types_by_group,
+                path_type_id_mapping=self.path_library.path_type_id_mapping
+            )
         self.basic_loader.load_dict_data(
             file=self.path_library.path_units, table=models.Unit.__tablename__,
             fields="id,description,displayName,unitName"
@@ -474,20 +478,24 @@ class EchoesExtractor:
 
     @BaseExtractor.extractor(name="corp_tech", requires=["items"])
     def load_corp_tech(self):
-        self.basic_loader.load_dict_data(
-            file=self.path_library.path_corp_tech,
-            dict_root_key="data.corp_task_item",
-            table=models.CorpTaskItem.__tablename__,
-            schema={
-                "key": ("itemId", int),
-                "fp_reward": ("fpReward", int),
-                "max_per_week": ("maxPerWeek", int),
-                "purchase_num": ("purchaseNum", int),
-                "random_group": ("randomGroup", int),
-                "week_times": ("weekTimes", int),
-            },
-            fields="itemId,fpReward,maxPerWeek,purchaseNum,randomGroup,weekTimes"
-        )
+        try:
+            self.basic_loader.load_dict_data(
+                file=self.path_library.path_corp_tech,
+                dict_root_key="data.corp_task_item",
+                table=models.CorpTaskItem.__tablename__,
+                schema={
+                    "key": ("itemId", int),
+                    "fp_reward": ("fpReward", int),
+                    "max_per_week": ("maxPerWeek", int),
+                    "purchase_num": ("purchaseNum", int),
+                    "random_group": ("randomGroup", int),
+                    "week_times": ("weekTimes", int),
+                },
+                fields="itemId,fpReward,maxPerWeek,purchaseNum,randomGroup,weekTimes"
+            )
+        except KeyError as e:
+            logger.error("Can't load corp tech items, data not found")
+            logger.error(e)
         self.basic_loader.load_corp_tech(
             file=self.path_library.path_corp_tech,
         )
