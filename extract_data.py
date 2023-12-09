@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 import sqlalchemy
 # noinspection PyUnresolvedReferences
@@ -68,6 +69,7 @@ if __name__ == '__main__':
 
     db = EchoesDB(engine, dialect=Dialect.from_str(args.dialect))
     data_extractor = EchoesExtractor(db, path_library, force=args.force_replace)
+    data_extractor.uni_loader.python27_exe = Path("legacy_adapter/venv/Scripts/python.exe")
     if args.drop:
         data_extractor.basic_loader.drop_tables()
     data_extractor.basic_loader.init_db()

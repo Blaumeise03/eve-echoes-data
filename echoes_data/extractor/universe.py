@@ -2,7 +2,9 @@ import importlib.util
 import json
 import logging
 import os
+import subprocess
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Callable, DefaultDict, Union
 
 from sqlalchemy import select, update
@@ -27,6 +29,31 @@ NUMBER_TO_ROMA = [
     "XXIX", "XXX"]
 
 
+def get_item_types(path_item_type: str):
+    spec = importlib.util.spec_from_file_location("eve.item_types", path_item_type)
+    item_types = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(item_types)
+    category_ids = {}
+    group_ids = {}
+    type_ids = {}
+    for cat in filter(lambda c: not c.startswith('__'), dir(item_types.CategoryIds)):
+        category_ids[getattr(item_types.CategoryIds, cat)] = cat
+    for group in filter(lambda g: not g.startswith('__'), dir(item_types.GroupIds)):
+        group_ids[getattr(item_types.GroupIds, group)] = group
+    for i_type in filter(lambda t: not t.startswith('__'), dir(item_types.ItemTypeIds)):
+        type_ids[getattr(item_types.ItemTypeIds, i_type)] = i_type
+    return category_ids, group_ids, type_ids
+
+
+def get_item_types_legacy(python_path, script_path, path_script_dir: str):
+    raw = subprocess.check_output([python_path, script_path, path_script_dir], shell=True, text=True)
+    raw = json.loads(raw)
+    raw = [dict([int(key), value]
+                for key, value in dicts.items())
+           for dicts in [raw["category_ids"], raw["group_ids"], raw["type_ids"]]]
+    return raw[0], raw[1], raw[2]
+
+
 class UniverseLoader:
     def __init__(self, db: BasicLoader):
         self.loader = db  # type: BasicLoader
@@ -38,6 +65,7 @@ class UniverseLoader:
         self.type_to_short_id = {}  # type: Dict[int, int]
         self.solar_systems = {}  # type: Dict[int, str]
         self.celestial_cache = {}  # type: Dict[int, Dict[str, Any]]
+        self.python27_exe = None  # type: str | None
 
     def load_texts(self, file_path: Union[str, os.PathLike]):
         logger.info("Loading localized strings")
@@ -122,23 +150,21 @@ class UniverseLoader:
                 cel_index=NUMBER_TO_ROMA[celestial_index])
 
     def load_item_types(self,
-                        path_item_type: Union[str, os.PathLike],
+                        path_item_type: Optional[Union[str, os.PathLike]] = None,
+                        path_script: Optional[Union[str, os.PathLike]] = None,
                         path_item_types_by_group: Optional[Union[str, os.PathLike]] = None,
                         path_type_id_mapping: Optional[Union[str, os.PathLike]] = None):
         # Reversed engineered from
         # script/data_common/static/item/item_type for long Type and Group IDs
-        spec = importlib.util.spec_from_file_location("eve.item_types", path_item_type)
-        item_types = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(item_types)
-        category_ids = {}
-        group_ids = {}
-        type_ids = {}
-        for cat in filter(lambda c: not c.startswith('__'), dir(item_types.CategoryIds)):
-            category_ids[getattr(item_types.CategoryIds, cat)] = cat
-        for group in filter(lambda g: not g.startswith('__'), dir(item_types.GroupIds)):
-            group_ids[getattr(item_types.GroupIds, group)] = group
-        for i_type in filter(lambda t: not t.startswith('__'), dir(item_types.ItemTypeIds)):
-            type_ids[getattr(item_types.ItemTypeIds, i_type)] = i_type
+        if path_item_type is None and path_script is None:
+            raise TypeError("Expected at least one argument of path_item_type and path_script")
+        if path_item_type is not None:
+            category_ids, group_ids, type_ids = get_item_types(path_item_type)
+        else:
+            category_ids, group_ids, type_ids = get_item_types_legacy(
+                self.python27_exe, Path("legacy_adapter/extract_pyc.py"),
+                path_script)
+
         type_groups = defaultdict(lambda: None)  # type: DefaultDict[int, Optional[int]]
         type_shorts = defaultdict(lambda: None)  # type: DefaultDict[int, Optional[int]]
         if path_item_types_by_group is not None:
