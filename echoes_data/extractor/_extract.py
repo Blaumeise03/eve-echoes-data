@@ -45,6 +45,10 @@ class PathLibrary:
         return self.root_path / "staticdata" / "items" / "category.json"
 
     @property
+    def path_script(self):
+        return self.root_path / "script"
+
+    @property
     def path_item_type(self):
         return self.root_path / "script" / "data_common" / "static" / "item" / "item_type.py"
 
@@ -240,13 +244,18 @@ class EchoesExtractor:
             file=self.path_library.path_category, table=models.Categories.__tablename__,
             schema={"zh_name": ("sourceName", str)}, localized={"localisedNameIndex": "zh_name"},
             # ToDo: Fix loading of groups (the ids are already in the file but not loaded)
-            default_values={"groupIds": "[]"},
+            # default_values={"groupIds": "[]"},
             fields="id,groupIds,localisedNameIndex,sourceName"
         )
         if not self.path_library.path_item_type.exists():
-            logger.error("File %s not found", self.path_library.path_item_type)
-            logger.error("This might cause an error if the data is not already loaded")
+            # File was not decompiled, import from pyc file
+            self.uni_loader.load_item_types(
+                path_script=self.path_library.path_script,
+                path_item_types_by_group=self.path_library.path_item_types_by_group,
+                path_type_id_mapping=self.path_library.path_type_id_mapping
+            )
         else:
+            # File was decompiled
             self.uni_loader.load_item_types(
                 path_item_type=self.path_library.path_item_type,
                 path_item_types_by_group=self.path_library.path_item_types_by_group,
@@ -296,16 +305,16 @@ class EchoesExtractor:
                 "nameKey": "zh_name",
                 "descKey": "zh_desc",
             },
-            default_values={
-                "npcCalCodes": "[]",
-                "normalDebris": "[]",
-                "corpCamera": "[]",
-                "abilityList": "[]",
-                "shipBonusCodeList": "[]",
-                "shipBonusSkillList": "[]",
-                "descSpecial": "[]",
-                "canBeJettisoned": False
-            },
+            # default_values={
+            #     "npcCalCodes": "[]",
+            #     "normalDebris": "[]",
+            #     "corpCamera": "[]",
+            #     "abilityList": "[]",
+            #     "shipBonusCodeList": "[]",
+            #     "shipBonusSkillList": "[]",
+            #     "descSpecial": "[]",
+            #     "canBeJettisoned": False
+            # },
             fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
         )
 
@@ -319,7 +328,7 @@ class EchoesExtractor:
                 "sub_affix": ("trainableModifierItems", str),
                 "available_ship": ("availableShips", str)},
             localized={},
-            default_values={"trainableModifierItems": "[]", "availableShips": "[]"},
+            # default_values={"trainableModifierItems": "[]", "availableShips": "[]"},
             fields="itemId,filmGroup,filmQuality,availableShips,selectableModifierItems,trainableModifierItems"
         )
 
@@ -382,13 +391,13 @@ class EchoesExtractor:
                 "change_ranges": ("changeRanges", str),
                 "attribute_ids": ("attributeIds", str)
             },
-            default_values={
-                "changeTypes": "[]",
-                "changeRanges": "[]",
-                "attributeIds": "[]",
-                "attributeOnly": False,
-                "changeRangeModuleNames": "[]"
-            },
+            # default_values={
+            #     "changeTypes": "[]",
+            #     "changeRanges": "[]",
+            #     "attributeIds": "[]",
+            #     "attributeOnly": False,
+            #     "changeRangeModuleNames": "[]"
+            # },
             fields="code,changeTypes,attributeOnly,changeRanges,attributeIds,changeRangeModuleNames"
         )
         self.basic_loader.load_dict_data(
