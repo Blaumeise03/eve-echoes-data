@@ -1,3 +1,5 @@
+import functools
+import json
 import logging
 import os.path
 import re
@@ -61,6 +63,20 @@ class PathLibrary:
         return self.root_path / "py_data" / "data_common" / "static" / "item" / "type_id_mapping.json"
 
     @property
+    def path_market_sell(self):
+        """
+        Contains all market groups with names and relations (items not included)
+        """
+        return self.root_path / "py_data" / "data_common" / "static" / "market_sell_items.json"
+
+    @property
+    def path_market_sell2(self):
+        """
+        Contains the items mapped to their market group, as well as the default item price (not estimated prices!)
+        """
+        return self.root_path / "py_data" / "data_common" / "static" / "market_sell_items_2.json"
+
+    @property
     def path_units(self):
         return self.root_path / "staticdata" / "dogma" / "units.json"
 
@@ -83,6 +99,20 @@ class PathLibrary:
     @property
     def path_item_nanocore(self):
         return self.root_path / "staticdata" / "items" / "item_nanocore.json"
+
+    @property
+    def path_item_skill(self):
+        """
+        Contains data for skill-chips
+        """
+        return self.root_path / "staticdata" / "items" / "item_skill.json"
+
+    @property
+    def path_item_drop(self):
+        """
+        Contains data for skill-chips
+        """
+        return self.root_path / "staticdata" / "items" / "item_skill.json"
 
     @property
     def path_repackage(self):
@@ -139,6 +169,10 @@ class PathLibrary:
     @property
     def path_corp_tech(self):
         return self.root_path / "py_data" / "data_common" / "static" / "corp_tech_skill.json"
+
+    @property
+    def path_tips_attr(self):
+        return self.root_path / "py_data" / "data_common" / "static" / "tips_attrs.json"
 
 
 class BaseExtractor:
@@ -224,9 +258,9 @@ class EchoesExtractor:
     def load_lang(self, langs: Optional[List[str]] = None):
         if langs is None:
             langs = ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]
+        self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang="zh", copy_to="source")
         for lang in langs:
             self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang=lang)
-        self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang="zh", copy_to="source")
 
     @BaseExtractor.extractor(name="lang_cache", requires="lang")
     def load_localized_cache(self):
@@ -266,11 +300,39 @@ class EchoesExtractor:
             fields="id,description,displayName,unitName"
         )
 
+    @BaseExtractor.extractor(name="market_group", requires=["lang_cache"])
+    def load_market_group(self):
+        self.basic_loader.load_market_groups(
+            path_market_group=self.path_library.path_market_sell
+        )
+
     @BaseExtractor.extractor(name="attrs", requires=["lang_cache", "base"])
     def load_attributes(self):
+        with open(self.path_library.path_tips_attr, "r", encoding="utf-8") as file:
+            tips_map = json.load(file)["data"]
+        attr_map = tips_map["equip_attr"]
+
+        def get_attr_data(attr_key: str, attr_id: str, attr_ids: str):
+            attr_ids = json.loads(attr_ids)
+            data_key = next(filter(lambda i: str(i) in attr_map, [attr_id, *attr_ids]), None)
+            if data_key is None:
+                return None
+            data_key = str(data_key)
+            return attr_map[data_key][attr_key] if attr_key in attr_map[data_key] else None
+
         self.basic_loader.load_dict_data(
             file=self.path_library.path_attributes, table=models.Attribute.__tablename__,
             schema={"operator": ("attributeOperator", str), "to_attr_id": ("toAttrId", str)},
+            calculated_fields=[
+                ("attributeSourceUnit", ["id", "toAttrId"], functools.partial(get_attr_data, "attr_unit")),
+                ("attributeSourceName", ["id", "toAttrId"], functools.partial(get_attr_data, "attr_name")),
+                ("attributeTip", ["id", "toAttrId"], functools.partial(get_attr_data, "attr_tips")),
+            ],
+            localized={
+                "unitLocalisationKey": "attributeSourceUnit",
+                "nameLocalisationKey": "attributeSourceName",
+                "tipLocalisationKey": "attributeTip",
+            },
             zero_none_fields=["unitId"],
             fields="id,attributeCategory,attributeName,available,chargeRechargeTimeId,defaultValue,highIsGood,"
                    "maxAttributeId,attributeOperator,stackable,toAttrId,unitId,unitLocalisationKey,attributeSourceUnit,"
@@ -298,23 +360,12 @@ class EchoesExtractor:
             merge_with_file_path=self.path_library.path_items_dogma_root,
             schema={
                 "zh_desc": ("sourceDesc", str),
-                "zh_name": ("sourceName", str),
-                "mining_exp_gain": ("exp", int)
+                "zh_name": ("sourceName", str)
             },
             localized={
                 "nameKey": "zh_name",
                 "descKey": "zh_desc",
             },
-            # default_values={
-            #     "npcCalCodes": "[]",
-            #     "normalDebris": "[]",
-            #     "corpCamera": "[]",
-            #     "abilityList": "[]",
-            #     "shipBonusCodeList": "[]",
-            #     "shipBonusSkillList": "[]",
-            #     "descSpecial": "[]",
-            #     "canBeJettisoned": False
-            # },
             fields="id,canBeJettisoned,descSpecial,mainCalCode,sourceDesc,sourceName,marketGroupId,lockSkin,product,npcCalCodes,exp,published,corpCamera,abilityList,shipBonusCodeList,shipBonusSkillList,onlineCalCode,activeCalCode"
         )
 
@@ -391,13 +442,6 @@ class EchoesExtractor:
                 "change_ranges": ("changeRanges", str),
                 "attribute_ids": ("attributeIds", str)
             },
-            # default_values={
-            #     "changeTypes": "[]",
-            #     "changeRanges": "[]",
-            #     "attributeIds": "[]",
-            #     "attributeOnly": False,
-            #     "changeRangeModuleNames": "[]"
-            # },
             fields="code,changeTypes,attributeOnly,changeRanges,attributeIds,changeRangeModuleNames"
         )
         self.basic_loader.load_dict_data(
@@ -479,7 +523,9 @@ class EchoesExtractor:
 
     @BaseExtractor.extractor(name="cobalt", requires="universe")
     def load_map(self):
-        self.uni_loader.init_cobalt_edge()
+        logger.warning("Cobalt edge skipped")
+        # ToDo: Remove warning, shouldn't be necessary when using latest staticdata export
+        # self.uni_loader.init_cobalt_edge()
 
     @BaseExtractor.extractor(name="planet_exploit", requires=["universe", "items"])
     def load_pi(self):
