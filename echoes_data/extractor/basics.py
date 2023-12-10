@@ -3,12 +3,12 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Dict, Any, Tuple, Type, Optional, List, Union, Set, TYPE_CHECKING
+from typing import Dict, Any, Tuple, Type, Optional, List, Union, Set, TYPE_CHECKING, Callable
 
 from sqlalchemy import Table, insert, delete, select, Connection, Row, update
 
 from echoes_data import models, utils
-from echoes_data.exceptions import DataException
+from echoes_data.exceptions import DataException, DataIntegrityException
 from echoes_data.models import CostType
 from echoes_data.utils import load_schema
 
@@ -43,6 +43,7 @@ class BasicLoader:
             models.StargateConnections,
             models.Unit.__table__,
             models.LocalizedString.__table__,
+            models.MarketGroup.__table__,
             models.Attribute.__table__,
             models.Effect.__table__,
             models.Group.__table__,
@@ -82,8 +83,11 @@ class BasicLoader:
         for table in self.tables:  # type: Table
             table.create(bind=self.db.engine, checkfirst=True)
 
-    def _insert_data(self, table: str, data: Dict[str, Any], conn: Connection):
-        stmt = self.db.dialect.upsert(table, data.keys())
+    def _insert_data(self, table: str, data: Dict[str, Any], conn: Connection, keys: Optional[List[str]] = None):
+        if keys is None:
+            stmt = self.db.dialect.upsert(table, data.keys())
+        else:
+            stmt = self.db.dialect.upsert(table, keys)
         conn.execute(stmt, data)
 
     def load_dict_data(self,
@@ -92,6 +96,7 @@ class BasicLoader:
                        merge_with_file: Optional[Path] = None,
                        auto_schema=True,
                        schema: Optional[Dict[str, Tuple[str, Type]]] = None,
+                       calculated_fields: Optional[List[Tuple[str, Union[str, List[str]], Callable[[Any], Any]]]] = None,
                        zero_none_fields: Optional[List[str]] = None,
                        fields: Optional[str] = None,
                        default_values: Optional[Dict[str, Any]] = None,
@@ -119,14 +124,14 @@ class BasicLoader:
                     load_schema(file=merge_with_file.with_suffix(".schema.json") if merge_with_file else None,
                                 schema=schema)
 
-            if type(fields) == str:
+            if type(fields) is str:
                 fields = fields.split(",")
             loaded = 0
             if dict_root_key:
                 for k in dict_root_key.split("."):
                     raw = raw[k]
             num = len(raw)
-            if type(loading_bar) == str:
+            if type(loading_bar) is str:
                 if loading_bar == "auto":
                     loading_bar = num > 3000
             if loading_bar:
@@ -147,6 +152,15 @@ class BasicLoader:
                         # Replace  with
                         if schema[k][1] == str:
                             data[schema[k][0]] = data[schema[k][0]].replace("'", "\"")
+                # Handle calculated properties
+                if calculated_fields is not None:
+                    for field, source_field, func in calculated_fields:
+                        if type(source_field) is str:
+                            # Only one field required
+                            data[field] = func(data[source_field])
+                        else:
+                            # Multiple fields required
+                            data[field] = func(*[data[s_f] for s_f in source_field])
                 if localized:
                     # Handle localized strings
                     for field, k in localized.items():
@@ -155,6 +169,8 @@ class BasicLoader:
                             string = data[k]
                         else:
                             string = item[k]
+                        if string is None:
+                            continue
                         string_c = correct_string(string)
                         if string == string_c:
                             # It is a normal string that can be handled directly
@@ -202,6 +218,7 @@ class BasicLoader:
                            merge_with_file_path: Optional[Path] = None,
                            auto_schema=True,
                            schema: Optional[Dict[str, Tuple[str, Type]]] = None,
+                           calculated_fields: Optional[List[Tuple[str, Union[str, List[str]], Callable[[Any], Any]]]] = None,
                            fields: Optional[str] = None,
                            default_values: Optional[Dict[str, Any]] = None,
                            localized: Optional[Dict[str, str]] = None,
@@ -236,7 +253,7 @@ class BasicLoader:
                 file_2 = merge_with_file_path / filename
             self.load_dict_data(
                 file=root_path / filename, table=table.__tablename__, merge_with_file=file_2,
-                auto_schema=auto_schema,
+                auto_schema=auto_schema, calculated_fields=calculated_fields,
                 schema=schema, fields=fields, default_values=default_values, localized=localized, skip=existing,
                 primary_key=primary_key, loading_bar=False, print_logs=False
             )
@@ -415,7 +432,7 @@ class BasicLoader:
     def correct_localized_string(self, string: str):
         matches = re.finditer(name_corrected_regexp, string)
         for m in matches:
-            string = string.replace(m.group(2), str(self.get_localized_id(m.group(2), save_new=True, only_cache=True)))
+            string = string.replace(m.group(1), str(self.get_localized_id(m.group(1), save_new=True, only_cache=True)))
         return string
 
     def load_item_attributes(self, file: Union[str, os.PathLike], table: str, columns: Tuple[str, str, str]):
@@ -429,6 +446,7 @@ class BasicLoader:
         with self.db.engine.connect() as conn:
             stmt = self.db.dialect.upsert(table, columns)
             conn.execute(stmt, batch)
+            conn.commit()
         logger.info("Saved %s rows into table %s from file %s", len(batch), table, file)
 
     def load_all_item_attributes(self,
@@ -533,6 +551,7 @@ class BasicLoader:
                 i += 1
                 if i % 100 == 0:
                     utils.print_loading_bar(i)
+            conn.commit()
         utils.clear_loading_bar()
         logger.info("Inserted %s item modifiers into %s", count, models.ItemModifiers.__tablename__)
 
@@ -692,3 +711,77 @@ class BasicLoader:
                         "online_cal_code": cal_code
                     })
             conn.commit()
+
+    def load_market_groups(self, path_market_group: Path):
+        with open(path_market_group, "r", encoding="utf-8") as file:
+            raw = json.load(file)
+        market_groups = {}  # type: Dict[int, Dict[str, Any]]
+
+        def get_or_create(_id: int, source_name: str, icon_id: Optional[int], parent: Optional[int] = None):
+            if _id in market_groups:
+                return market_groups
+            _group = {
+                "id": _id,
+                "sourceName": source_name,
+                "localisationIndex": None,
+                "iconIndex": int(icon_id) if icon_id is not None else None,
+                "parentId": parent
+            }
+            market_groups[_id] = _group
+
+        for third_id, group in raw["data"]["market_group_id"].items():  # type: str, Dict[str, Any]
+            third_id = int(third_id)  # type: int
+            first_group = get_or_create(
+                group["market_group_ID_1st"],
+                group["market_group_name_1st"],
+                group["market_group_icon_1st"]
+            )
+            second_group = get_or_create(
+                group["market_group_ID_2nd"],
+                group["market_group_name_2nd"],
+                group["market_group_icon_2nd"],
+                parent=group["market_group_ID_1st"]
+            )
+            third_group = get_or_create(
+                third_id,
+                group["market_group_name_3rd"],
+                None,
+                parent=group["market_group_ID_2nd"]
+            )
+        first_lvl = {}
+        second_lvl = {}
+        third_lvl = {}
+        for group in market_groups.values():
+            group["localisationIndex"] = self.get_localized_id(group["sourceName"], save_new=True, only_cache=True)
+            if group["parentId"] is None:
+                first_lvl[group["id"]] = group
+                continue
+            if group["parentId"] in first_lvl:
+                second_lvl[group["id"]] = group
+                continue
+            if group["parentId"] in second_lvl:
+                third_lvl[group["id"]] = group
+                continue
+            raise DataIntegrityException(f"Market group {group['id']} has unknown parent id {group['parentId']}")
+        logger.info("Loaded %s:%s:%s market groups", len(first_lvl), len(second_lvl), len(third_lvl))
+        with self.db.engine.connect() as conn:
+            def _insert_group(_group: Dict):
+                self._insert_data(
+                    models.MarketGroup.__tablename__,
+                    group,
+                    conn,
+                    keys=["id", "sourceName", "localisationIndex", "parentId", "iconIndex"])
+
+            self.save_localized_cache(conn)
+            for group in first_lvl.values():
+                _insert_group(group)
+            conn.commit()
+            for group in second_lvl.values():
+                _insert_group(group)
+            conn.commit()
+            for group in third_lvl.values():
+                _insert_group(group)
+            conn.commit()
+        logger.info("Saved %s market groups into %s",
+                    len(first_lvl) + len(second_lvl) + len(third_lvl),
+                    models.MarketGroup.__tablename__)

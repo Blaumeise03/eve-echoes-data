@@ -12,3 +12,7 @@ class DataNotFoundException(DataException):
 
 class CacheException(DataException):
     pass
+
+
+class DataIntegrityException(DataException):
+    pass
