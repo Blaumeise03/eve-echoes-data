@@ -39,6 +39,10 @@ class PathLibrary:
         return self.root_path / "staticdata" / "gettext"
 
     @property
+    def path_msg_index(self):
+        return self.root_path / "staticdata" / "gettext" / "msg_index" / "index.json"
+
+    @property
     def path_group(self):
         return self.root_path / "staticdata" / "items" / "group.json"
 
@@ -248,7 +252,12 @@ class EchoesExtractor:
         msg = " - ".join(map(lambda extr: extr.name, order))
         logger.info("Extracting data in this order: %s", msg)
         for extractor in order:
-            extractor.func(self)
+            logger.info("Running extractor %s: %s", extractor.name, extractor.func)
+            try:
+                extractor.func(self)
+            except Exception as e:
+                logger.error("An exception occurred during processing of extractor %s", extractor.name, exc_info=e)
+                raise e
 
     @classmethod
     def get_all_scopes(cls):
@@ -257,14 +266,14 @@ class EchoesExtractor:
     @BaseExtractor.extractor(name="lang")
     def load_lang(self, langs: Optional[List[str]] = None):
         if langs is None:
-            langs = ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zhcn"]
-        self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang="zh", copy_to="source")
+            langs = ["de", "en", "fr", "ja", "kr", "por", "ru", "spa", "zh", "zhcn"]
         for lang in langs:
             self.basic_loader.load_language(base_path=self.path_library.path_gettext, lang=lang)
 
     @BaseExtractor.extractor(name="lang_cache", requires="lang")
     def load_localized_cache(self):
         self.basic_loader.load_localized_cache()
+        self.basic_loader.lang.load_msg_index(self.path_library.path_msg_index)
 
     @BaseExtractor.extractor(name="base", requires="lang_cache")
     def load_basics(self):

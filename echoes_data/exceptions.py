@@ -16,3 +16,7 @@ class CacheException(DataException):
 
 class DataIntegrityException(DataException):
     pass
+
+
+class LocalizationException(DataException):
+    pass
