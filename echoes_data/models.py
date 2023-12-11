@@ -320,7 +320,7 @@ class Type(Base):
 class Item(Base):
     __tablename__ = "items"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String(64), nullable=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=True)
     canBeJettisoned: Mapped[bool] = mapped_column(Boolean, nullable=True)
     descSpecial: Mapped[str] = mapped_column(String(64), nullable=True)
     mainCalCode: Mapped[str] = mapped_column(String(128), nullable=True)

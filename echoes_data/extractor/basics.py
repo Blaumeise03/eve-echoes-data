@@ -5,10 +5,13 @@ import re
 from pathlib import Path
 from typing import Dict, Any, Tuple, Type, Optional, List, Union, Set, TYPE_CHECKING, Callable
 
+import mmh3
 from sqlalchemy import Table, insert, delete, select, Connection, Row, update
+from sqlalchemy.orm import Session
 
 from echoes_data import models, utils
 from echoes_data.exceptions import DataException, DataIntegrityException
+from echoes_data.localization import LocalizationMap, Language
 from echoes_data.models import CostType
 from echoes_data.utils import load_schema
 
@@ -31,9 +34,11 @@ def correct_string(string: str):
 class BasicLoader:
     def __init__(self, db: "EchoesDB") -> None:
         self.db = db
-        self.strings_en = {}  # type: Dict[int, str]
-        self.strings = {}  # type: Dict[str, int]
-        self.new_loc_cache = {}
+        # self.strings_en = {}  # type: Dict[int, str]
+        # self.strings = {}  # type: Dict[str, int]
+        # self.source_string = {}  # type: Dict[str, int]
+        # self.localization_map = {}  # type: Dict[int, int]
+        self.lang = LocalizationMap()
         self.tables = [
             models.Region.__table__,
             models.Constellation.__table__,
@@ -303,8 +308,6 @@ class BasicLoader:
                 batch.append({
                     key_field: key_type(key), value_field: value_type(value), second_value_field: value_type(value)
                 })
-            if save_lang:
-                self.strings[value_type(value)] = key_type(key)
         self._insert_batch_data(table, value_field, batch)
         if second_value_field:
             self._insert_batch_data(table, second_value_field, batch)
@@ -345,32 +348,8 @@ class BasicLoader:
             start = res[0] + 1
         return start
 
-    def get_localized_id(self, zh_name: str, save_new=False, only_cache=True) -> int:
-        if zh_name in self.strings:
-            return self.strings[zh_name]
-        res = None
-        if not only_cache:
-            with self.db.engine.connect() as conn:
-                stmt = select(models.LocalizedString.id).where(models.LocalizedString.source == zh_name)
-                res = conn.execute(stmt).fetchone()
-        if res is None:
-            if save_new:
-                next_id = self.get_next_loc_id()
-                if not only_cache:
-                    with self.db.engine.connect() as conn:
-                        stmt = insert(models.LocalizedString).values(id=next_id, source=zh_name)
-                        conn.execute(stmt)
-                        conn.commit()
-                    logger.info("Localized string for '%s' not found, saved as id %s", zh_name, next_id)
-                self.strings[zh_name] = next_id
-                if only_cache:
-                    self.new_loc_cache[zh_name] = next_id
-                return next_id
-            else:
-                logger.warning("Localized string for '%s' not found", zh_name)
-                return -1
-        self.strings[zh_name] = res[0]
-        return res[0]
+    def get_localized_id(self, source: str, save_new=False, only_cache=True) -> int:
+        return self.lang.lookup_localization_id(source, save_new)
 
     def get_complex_string(self, source_string: str):
         # {drone_affix:攻击型 } {drone:渗透者}
@@ -390,43 +369,29 @@ class BasicLoader:
             last_end = match.end()
             placeholder_type = match.group(1)
             placeholder_key = match.group(2)
-            r = self.get_localized_string(zh_name=placeholder_key, return_def=False, check_complex=False)
+            r = self.get_localized_string(source=placeholder_key, return_def=False, check_complex=False)
             if r is None:
                 return None
             result += r
         return result
 
-    def get_localized_string(self, zh_name: str, return_def=True, check_complex=True):
-        if zh_name not in self.strings:
-            if check_complex:
-                en = self.get_complex_string(zh_name)
-                if en is not None:
-                    return en
-            if return_def:
-                return zh_name
-            return None
-        i = self.strings[zh_name]
-        if i in self.strings_en:
-            return self.strings_en[self.strings[zh_name]]
-        if return_def:
-            return zh_name
-        return None
+    def get_localized_string(self, source: str, return_def=True, check_complex=True):
+        return self.lang.get_localized_string(source, lang=Language.en, return_def=return_def, check_complex=check_complex)
 
     def load_localized_cache(self):
-        with self.db.engine.connect() as conn:
-            stmt = select(models.LocalizedString.id, models.LocalizedString.source, models.LocalizedString.en)
-            res = conn.execute(stmt).fetchall()
-            for s_id, source, en in res:
-                self.strings[source] = s_id
-                self.strings_en[s_id] = en
-            logger.info("Loaded %s localized strings into the cache", len(res))
+        logger.info("Loading localization cache, this might take a minute")
+        with Session(self.db.engine) as session:
+            stmt = select(models.LocalizedString)
+            res = session.query(models.LocalizedString).all()
+            self.lang.load_strings(res)
+            logger.info("Loaded %s localized strings into the cache", len(self.lang.localization))
 
     def save_localized_cache(self, conn: Connection):
-        if len(self.new_loc_cache) == 0:
+        if len(self.lang.new_lang_cache) == 0:
             return
-        batch = [{"id": v, "source": k} for k, v in self.new_loc_cache.items()]
+        batch = [{"id": l.id, "source": l.source} for l in self.lang.new_lang_cache]
         self._insert_batch_data(table="localised_strings", value_field="source", batch=batch, conn=conn)
-        self.new_loc_cache.clear()
+        self.lang.new_lang_cache.clear()
         # logger.info("Saved %s new localised strings from cache into the database", len(batch))
 
     def correct_localized_string(self, string: str):

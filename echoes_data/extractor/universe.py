@@ -125,6 +125,7 @@ class UniverseLoader:
             name = self.loader.get_localized_string(zh_name, return_def=False)
         if name is None:
             return str(group_id)
+        return name
 
     def get_celestial_name(self, cel_id: int):
         # Reverse engineered from script/eveuniverse/universe.py
