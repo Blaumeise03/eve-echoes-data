@@ -145,7 +145,7 @@ class BlueprintData(CacheAble):
 
         self._resources.sort(key=_key)
 
-    def calculate_costs(self, efficiency: float = 1) -> Dict[Union[Item, "BlueprintData"], int]:
+    def calculate_costs(self, efficiency: float = 1) -> Dict[Item, int]:
         """
         Calculates the total costs of the item given a specific efficiency. If the blueprint was loaded recursively, this
         function will add up all base costs from the sub-blueprints (e.g. capital components).
@@ -155,8 +155,8 @@ class BlueprintData(CacheAble):
         """
         total_costs = {}  # type: Dict[Union[Item, BlueprintData], int]
         for cost in self.resources:
-            if isinstance(cost.item, BlueprintData):
-                sub_cost = cost.item.calculate_costs(efficiency)
+            if cost.item.blueprint is not None:
+                sub_cost = cost.item.blueprint.calculate_costs(efficiency)
                 for c in sub_cost.keys():
                     a = total_costs.get(c, 0)
                     total_costs[c] = a + sub_cost[c] * math.ceil(cost.amount * efficiency)

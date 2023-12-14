@@ -183,7 +183,7 @@ class EchoesDB:
     def fetch_item(self,
                    item_name: str,
                    session: Optional[Session] = None,
-                   cache: Optional[DataCache] = None) -> Optional[Item]:
+                   cache: Optional[DataCache] = None) -> Item:
         if session is None:
             with Session(self.engine) as session:
                 return self.fetch_item(item_name=item_name, cache=cache, session=session)
@@ -194,6 +194,8 @@ class EchoesDB:
             return item
         # noinspection PyTypeChecker
         db_item = session.query(models.Item).filter(models.Item.name.ilike(item_name)).first()  # type: models.Item
+        if db_item is None:
+            raise DataNotFoundException(f"Item with name {item_name} not found")
         return _auto_mapper(cache, db_item)
 
     def fetch_all_blueprint_data(self,
