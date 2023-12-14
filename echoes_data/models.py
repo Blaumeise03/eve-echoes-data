@@ -341,7 +341,7 @@ class Item(Base):
     shipBonusCodeList: Mapped[str] = mapped_column(Text(), nullable=True)
     shipBonusSkillList: Mapped[str] = mapped_column(Text(), nullable=True)
     # These are still not implemented properly
-    product: Mapped[str] = mapped_column(BigInteger(), nullable=True)
+    product: Mapped[int] = mapped_column(BigInteger(), nullable=True)
     exp: Mapped[str] = mapped_column(Float(), nullable=True)
     published: Mapped[bool] = mapped_column(Boolean(), nullable=True)  # , server_default=text("FALSE"))
     preSkill: Mapped[str] = mapped_column(String(32), nullable=True)
@@ -448,17 +448,17 @@ class Blueprint(Base):
         ForeignKey("items.id", name="key_blueprint_items_bp"), primary_key=True)
     blueprintItem: Mapped[Item] = relationship(foreign_keys=[blueprintId], lazy="joined")
     productId: Mapped[int] = mapped_column(
-        ForeignKey("items.id", name="key_blueprint_items_prod"), primary_key=True)
+        ForeignKey("items.id", name="key_blueprint_items_prod"))
     product: Mapped[Item] = relationship(foreign_keys=[productId], lazy="joined")
     outputNum: Mapped[int] = mapped_column(Integer)
     skillLvl: Mapped[int] = mapped_column(Integer)
     materialAmendAtt: Mapped[int] = mapped_column(
-        ForeignKey("attributes.id", name="key_blueprint_attributes_mats"), primary_key=True)
-    decryptorMul: Mapped[int] = mapped_column(Integer)
+        ForeignKey("attributes.id", name="key_blueprint_attributes_mats"))
+    decryptorMult: Mapped[int] = mapped_column(Integer)
     money: Mapped[int] = mapped_column(BigInteger)
     time: Mapped[int] = mapped_column(Integer)
     timeAmendAtt: Mapped[int] = mapped_column(
-        ForeignKey("attributes.id", name="key_blueprint_attributes_time"), primary_key=True)
+        ForeignKey("attributes.id", name="key_blueprint_attributes_time"))
     type: Mapped[int] = mapped_column(Integer)
     resourceCosts: Mapped[List["BlueprintCosts"]] = relationship(back_populates="blueprint", lazy="joined")
 

@@ -1,4 +1,7 @@
 import unittest
+
+from echoes_data import data
+from echoes_data.database import DataCache
 from echoes_data.extractor import basics
 from echoes_data.utils import *
 
@@ -48,6 +51,19 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(("attrEList", str), schema["attr_e_list"])
         self.assertEqual(("attr_d_no_overwrite!!", int), schema["attr_d_no_overwrite"])
         self.assertEqual(("id", int), schema["key"])
+
+    def test_caching(self):
+        cache = DataCache()
+        cache.add(data.Item(item_id=1234, name="Test 1234"))
+        item = cache.get(data.Item, 1234)
+        self.assertEqual("Test 1234", item.name)
+        self.assertIs(item, cache.get_or_create(data.Item, 1234, item_id=1234, name="Test 1234"))
+        self.assertEqual("Test 567", cache.get_or_create(data.Item, 567, item_id=567, name="Test 567").name)
+        self.assertTrue(1234 in cache)
+        self.assertTrue(item in cache)
+        cache.free()
+        self.assertFalse(1234 in cache)
+        self.assertFalse(567 in cache)
 
 
 if __name__ == '__main__':
